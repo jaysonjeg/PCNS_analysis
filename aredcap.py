@@ -91,9 +91,6 @@ if summary_printout:
     print(f"\nFollowing values are within past subjects that attended, included, did mri")
     subgroup_summary(healthy_didmri_inc,clinical_didmri_inc,iq=True,do_stats=True)
 
-    sz_didmri_inc = (clinical_didmri_inc) & (t.dx_dsm___1==1)
-    sza_didmri_inc= (clinical_didmri_inc) & (t.dx_dsm___2==1)
-
     print(f"\nOut of {clinical_didmri_inc.sum()} clinical pts:\
     \nSchizophrenia: {sz_didmri_inc.sum()}\
     \nSchizoaffective: {sza_didmri_inc.sum()}\

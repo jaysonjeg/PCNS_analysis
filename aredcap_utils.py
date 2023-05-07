@@ -30,7 +30,7 @@ def do_check_files(t,check_numb_mri,check_numb_beh,data_folder,valid,anomalies):
 
     invalid_but_has_folder=[]
     for i in range(len(t)):
-        sub=f'{t.record_id[i]:03}'
+        sub=subs[i]
         sub_folder=f"{data_folder}\\PCNS_{sub}_BL"
         has_sub_folder=os.path.isdir(sub_folder)
 

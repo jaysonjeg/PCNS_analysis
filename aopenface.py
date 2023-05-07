@@ -5,16 +5,15 @@ Code using OpenFace on facial videos from PCNS study (movieDI and cface) to prod
 import matplotlib.pyplot as plt, numpy as np, pandas as pd
 from glob import glob
 import re, os, subprocess
+from acommon import *
 
 #Settable parameters
-taskname='cface1_*_Ta_H*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
+taskname='movieDI_*_Ta_F_Ricky*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
 run_duration = np.inf #stop after this time (seconds)
-pc='home'
-top_folder="Z:\\NEWYSNG\\Shiami_DICOM\\Psychosis\\PCNS"  #"D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw\\"
 show_plot=False #show AU 12 time series per participant
 
 task_dict={'movieDI_*_Ta_F_Ricky*':'movieDI', 'cface1_*_Ta_H*':'cface1'} #mapping from 'taskname' to the label in OpenFace output file
-intermediates_folder='D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates'
+
 
 if pc=='laptop':
     openfacefolder='C:/Users/c3343721/Desktop/FaceThings/OpenFace-master' 
@@ -22,8 +21,8 @@ elif pc=='home':
     openfacefolder='D:/FORSTORAGE/OpenFace-master'
 openfacefile=f'{openfacefolder}/OpenFace-master/x64/Release/FeatureExtraction.exe'
 
-files_with_task=glob(f"{top_folder}\\PCNS_*_BL\\beh\\{taskname}\\")
-files_with_task_and_video=glob(f"{top_folder}\\PCNS_*_BL\\beh\\{taskname}\\*.avi")
+files_with_task=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{taskname}\\")
+files_with_task_and_video=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{taskname}\\*.avi")
 assert(len(files_with_task)==len(files_with_task_and_video))
 subjects=[re.search('PCNS_(.*)_BL',file).groups()[0] for file in files_with_task] #gets all subject names who have data for the given task
 
@@ -49,7 +48,7 @@ for subject in subjects_with_task:
                 print('Ran out of time')
                 break
             
-            contents=glob(f"{top_folder}\\PCNS_{subject}_BL\\beh\\{taskname}\\*.avi")
+            contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\{taskname}\\*.avi")
             if len(contents)!=1:
                 print(f'We didnt find exactly 1 video in: {subject} {taskname}')
                 assert(0)            

@@ -23,11 +23,13 @@ from datetime import datetime
 
 ### SETTABLE PARAMETERS ###
 pc='home' #'laptop', 'home'
-files_source='local' #'local' for local machine, or else 'NEWYSNG'
+files_source='NEWYSNG' #'local' for local machine, or else 'NEWYSNG'
+
 
 if pc=='laptop':
     data_folder="Z:\\Shiami_DICOM\\Psychosis\\PCNS"
 elif pc=='home':
+    intermediates_folder='D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates'
     if files_source == 'NEWYSNG':
         data_folder="Z:\\NEWYSNG\\Shiami_DICOM\\Psychosis\\PCNS"
     elif files_source == 'local':
@@ -40,6 +42,7 @@ IQ_cutoff = [80,150] #consider [80/85 to 120/125]
 
 t=pd.read_csv(f"{redcap_folder}\\{redcap_file}")
 
+subs=np.array([f'{t.record_id[i]:03}' for i in range(t.shape[0])])
 attended=((t.pilotorreal==2) & t.attended==1)
 dates=pd.to_datetime(t.attend_date,dayfirst=True)
 future_subs = dates > datetime.today() #subjects coming in the future
@@ -76,6 +79,10 @@ clinical_nonattended=(clinical & (t.attended!=1) & ~(future_subs))
 
 healthy_DidMRIPlusFuture = (healthy_didmri_inc | healthy_future)
 clinical_DidMRIPlusFuture = (clinical_didmri_inc | clinical_future)
+
+sz_didmri_inc = (clinical_didmri_inc) & (t.dx_dsm___1==1) #schizophrenia, did mri
+sza_didmri_inc= (clinical_didmri_inc) & (t.dx_dsm___2==1) #schizoaffective, did mri
+
 
 panss_labels_P = [f'panss_p{i}' for i in range(1,8)] #panss positive symptom scamri_include_alltasksle
 panss_labels_N = [f'panss_n{i}' for i in range(1,8)] #panss negative
