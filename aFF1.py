@@ -5,6 +5,7 @@ import numpy as np, pandas as pd
 import matplotlib.pyplot as plt
 from glob import glob
 import re
+from acommon import *
 
 def ff1_get_subject_data(subject,show_plots):
     contents=glob(f"{top_folder}\\PCNS_{subject}_BL\\beh\\FF1*\\") #find the FF1 folder for this subject
@@ -53,11 +54,16 @@ task='FF1'
 top_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw\\"
 files_with_task=glob(f"{top_folder}\\PCNS_*_BL\\beh\\{task}*\\")
 subjects=[re.search('PCNS_(.*)_BL',file).groups()[0] for file in files_with_task] #gets all subject names who have data for the given task
+
+'''
 subjects_to_exclude=['020'] #exclude these subjects, e.g. ['020']
 """
 020: no ppg
 
 """
+'''
+subjects_to_exclude=[]
+
 subjects_with_task = [subject for subject in subjects if subject not in subjects_to_exclude]
 
 temp=[ff1_get_subject_data(subject,show_plots=False) for subject in subjects_with_task]
