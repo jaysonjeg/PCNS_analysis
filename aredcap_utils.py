@@ -1,5 +1,4 @@
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
-from datetime import datetime
 import os, re
 
     
@@ -16,36 +15,32 @@ def chk(folder,folder_items,sub,pattern,redcap_valid,check_no_of_files,nitems):
     return redcap_valid and has_one_file
 def check(a,b,sub,string):
     if a==True and b!=True: #2 goes to not True
-        print(f'{sub}: {string}: Missing in folder but Redcap has it')
+        print(f'{sub}: {string}: Redcap has it but wrong no of folders')
     elif b==True and a!=True:
         print(f'{sub}: {string}: Redcap says invalid but folder has it')
 
-
-
-def do_check_files(t,check_numb_mri,check_numb_beh,data_folder,valid):
+def do_check_files(t,check_numb_mri,check_numb_beh,data_folder,valid,anomalies):
 
     print('Checking all files')
     if check_numb_mri: print('Checking no of files in mri too')
     if check_numb_beh: print('Checking no of files in beh too')
 
-    
-    
-    #from aredcap_utils import chk,check
-
     z=[False]*len(t)
     df = pd.DataFrame({'cfaceo':z,'cfacei':z,'movieo':z,'moviei':z,'hrdo':z,'proprioo':z,'sinuso':z,'facegngi':z,'ffi':z,'mri':z,'diffusion':z},dtype=bool)
 
-    data_folder_items=os.listdir(data_folder)
     invalid_but_has_folder=[]
     for i in range(len(t)):
-        record_id=t.record_id[i]
         sub=f'{t.record_id[i]:03}'
-        print(f'Checking sub {sub}')
         sub_folder=f"{data_folder}\\PCNS_{sub}_BL"
         has_sub_folder=os.path.isdir(sub_folder)
-        if not(valid[i]) and has_sub_folder: invalid_but_has_folder.append(sub)        
+
+        if not(valid[i]) and has_sub_folder: 
+            print(f'sub {sub} invalid but has folder')
+            invalid_but_has_folder.append(sub)        
         if valid[i]:
-            print(f'Checking sub {sub}')
+            print(f'sub {sub}: checking')
+            if sub in anomalies.keys():
+                print(f'{sub}: {anomalies[sub]}')
             check(t.attended[i]==1 , has_sub_folder , sub , 'has_sub_folder')
             if has_sub_folder or t.attended[i]==1:
                 sub_folder_items=os.listdir(sub_folder)
@@ -55,11 +50,15 @@ def do_check_files(t,check_numb_mri,check_numb_beh,data_folder,valid):
                     beh_folder=f"{sub_folder}\\beh"
                     beh_folder_items=os.listdir(beh_folder)
                     chkb = lambda pattern,redcap_valid,nitems: chk(beh_folder,beh_folder_items,sub,pattern,redcap_valid,check_numb_beh,nitems)
-                    
+                    if t.loc[i,'valid_eyetracking']==1:
+                        nfiles_cfacei,nfiles_facegngi,nfiles_ffi=6,6,7
+                    else:
+                        nfiles_cfacei,nfiles_facegngi,nfiles_ffi=5,5,6
                     df.cfaceo[i]=chkb(r"cface1.*Ta_[HF]",t.valid_cfaceo[i],5)
-                    df.cfacei[i]=chkb(r"cface1.*Ta_M",t.valid_cfacei[i],6)
-                    df.facegngi[i]=chkb(r"facegng.*Ta_M",t.valid_facegngi[i],6)
-                    df.ffi[i]=chkb(r"FF1.*Ta_M",t.valid_ffi[i],7)
+                    df.cfacei[i]=chkb(r"cface1.*Ta_M",t.valid_cfacei[i],nfiles_cfacei)
+
+                    df.facegngi[i]=chkb(r"facegng.*Ta_M",t.valid_facegngi[i],nfiles_facegngi)
+                    df.ffi[i]=chkb(r"FF1.*Ta_M",t.valid_ffi[i],nfiles_ffi)
                     df.hrdo[i]=chkb(r"^HRD",t.valid_hrdo[i],11)
                     df.moviei[i]=chkb(r"^movie.*Ta_M",t.valid_moviei[i],6)
                     df.movieo[i]=chkb(r"^movie.*Ta_[HF]",t.valid_movieo[i],4)
@@ -70,17 +69,18 @@ def do_check_files(t,check_numb_mri,check_numb_beh,data_folder,valid):
                 has_mri_folder = np.sum(temp)==1
                 check(has_mri_folder , t.attended_fmri[i]==1 , sub , 'has_mri_folder')  
                 if has_mri_folder or t.attended_fmri[i]==1:
+
                     mri_folder=f"{sub_folder}\\{sub_folder_items[temp.index(True)]}"
                     items=os.listdir(mri_folder)                    
                     chk2 = lambda pattern,redcap_valid,nitems: chk(mri_folder,items,sub,pattern,redcap_valid,check_numb_mri,nitems)                    
-                    
                     df.facegngi[i] = df.facegngi[i] and\
-                    chk2(r".*FACEGNG",t.valid_facegngi[i],542)     
-                    
+                    chk2(r".*FACEGNG",t.valid_facegngi[i],542)  
+
                     df.cfacei[i] = df.cfacei[i] and\
                     chk2(r".*BOLD_CFACE1_PA_0",t.valid_cfacei[i],665) and\
                     chk2(r".*BOLD_CFACE1_PA_PHYSIO",t.valid_cfacei[i],1) and \
-                    chk2(r".*BOLD_CFACE1_PA_SBREF",t.valid_cfacei[i],1)                     
+                    chk2(r".*BOLD_CFACE1_PA_SBREF",t.valid_cfacei[i],1)  
+
                     df.ffi[i] = df.ffi[i] and\
                     chk2(r".*BOLD_FF1_0",t.valid_ffi[i],545) and\
                     chk2(r".*BOLD_FF1_PHYSIO",t.valid_ffi[i],1) and\
@@ -113,19 +113,14 @@ def do_check_files(t,check_numb_mri,check_numb_beh,data_folder,valid):
 
 
 
-def plot_clinical_factors_for_group(t,subs,title_prefix):
-    panss_labels_P = [f'panss_p{i}' for i in range(1,8)] #panss positive symptom scamri_include_alltasksle
-    panss_labels_N = [f'panss_n{i}' for i in range(1,8)] #panss negative
-    panss_labels_G = [f'panss_g{i}' for i in range(1,17)] #panss general psychopathology
-    hamd_labels = [f'hamd_{i}' for i in range(1,18)] #hamilton depression scale
-    ymrs_labels = [f'ymrs_{i}' for i in range(1,12)] #young mania rating scale
-    sas_labels = [f'sas_{i}' for i in range(1,11)] #simpson angus scale for extreapyramidal symptoms
-    subs_panssP = t.loc[subs,panss_labels_P].sum(axis=1)
-    subs_panssN = t.loc[subs,panss_labels_N].sum(axis=1)
-    subs_panssG = t.loc[subs,panss_labels_G].sum(axis=1)
-    subs_hamd = t.loc[subs,hamd_labels].sum(axis=1)
-    subs_ymrs = t.loc[subs,ymrs_labels].sum(axis=1)
-    subs_sas = t.loc[subs,sas_labels].sum(axis=1)
+def plot_clinical_factors_for_group(t,subs,title_prefix,panss_P,panss_N,panss_G,hamd,ymrs,sas):
+    subs_panssP = panss_P[subs]
+    subs_panssN = panss_N[subs]
+    subs_panssG = panss_G[subs]
+    subs_hamd = hamd[subs]
+    subs_ymrs = ymrs[subs]
+    subs_sas = sas[subs]
+
     subs_chlor = t.loc[subs,'meds_chlor'] #chlorpromazine equivalents of antipsychotics
     subs_cgi = t.loc[subs,'cgi_s'] #clinician global impression of symptom severity
     subs_sofas = t.loc[subs,'sofas'] #sofas scale 'social and occupational functioning'

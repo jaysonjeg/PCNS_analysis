@@ -7,13 +7,13 @@ from glob import glob
 import re, os, subprocess
 
 #Settable parameters
-taskname='cface1_*_Ta_H*' #'movieDI_*_Ta_F_Ricky*'
+taskname='cface1_*_Ta_H*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
 run_duration = np.inf #stop after this time (seconds)
 pc='home'
+top_folder="Z:\\NEWYSNG\\Shiami_DICOM\\Psychosis\\PCNS"  #"D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw\\"
 show_plot=False #show AU 12 time series per participant
 
 task_dict={'movieDI_*_Ta_F_Ricky*':'movieDI', 'cface1_*_Ta_H*':'cface1'} #mapping from 'taskname' to the label in OpenFace output file
-top_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw\\"
 intermediates_folder='D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates'
 
 if pc=='laptop':
@@ -27,7 +27,7 @@ files_with_task_and_video=glob(f"{top_folder}\\PCNS_*_BL\\beh\\{taskname}\\*.avi
 assert(len(files_with_task)==len(files_with_task_and_video))
 subjects=[re.search('PCNS_(.*)_BL',file).groups()[0] for file in files_with_task] #gets all subject names who have data for the given task
 
-subjects_to_exclude=['004'] #exclude these subjects
+subjects_to_exclude=['003','004'] #exclude these subjects
 """
 004 (is this pilot subject?) is 30fps, everyone else is 20fps. Seems to go beyond 100%...
 """
