@@ -2,16 +2,15 @@
 Print out summary from redcap export .csv file, and plot figures of demographic variables
 """
 
-
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
 import aredcap_utils
 from acommon import *
 
 ### SETTABLE PARAMETERS ###
-check_files=False #to check whether files match REDCAP 'valid' entries
-check_numb_mri=False #to check number of files within each MRI folder (slow)
-check_numb_beh=False
-summary_printout=True 
+check_files=True #to check whether files match REDCAP 'valid' entries
+check_numb_mri=True #to check number of files within each MRI folder (slow)
+check_numb_beh=True
+summary_printout=False 
 plot_demographics=False
 
 ### Check behavioural and MRI files ###

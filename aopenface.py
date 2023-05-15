@@ -8,7 +8,7 @@ import re, os, subprocess
 from acommon import *
 
 #Settable parameters
-taskname='movieDI_*_Ta_F_Ricky*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
+taskname='cface1_*_Ta_H*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
 run_duration = np.inf #stop after this time (seconds)
 show_plot=False #show AU 12 time series per participant
 

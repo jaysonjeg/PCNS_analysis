@@ -12,8 +12,10 @@ for sub_folder in os.listdir(source_folder):
 
     if re.match(r'PCNS_(.*)_BL',sub_folder):
         if os.path.exists(f'{target_folder}\\{sub_folder}'):
-            print(f'{sub_folder} exists')
+            pass
+            #print(f'{sub_folder} exists')
         else:
             print(f'{sub_folder} doesnt exist. Copying now')
             shutil.copytree(f'{source_folder}\\{sub_folder}',f'{target_folder}\\{sub_folder}')
+            #print(f'{sub_folder[5:8]}',end=', ')
 

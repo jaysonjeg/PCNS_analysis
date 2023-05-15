@@ -7,6 +7,8 @@ group 1 control, 2 psychosis (covers all entries)
 attended: blank or 1 
 attended_fmri: blank or 0 or 1
 valid_any: nan, 1 for valid, or 2 for invalid. Anyone with ((t.attended==1) & (t.pilotorreal==2)) has a non-nan entry for valid_any
+valid_cfacei, valid_moviei, valid_ffi, valid_facegngi, valid_cfaceo, valid_movieo, valid_hrdo, valid_sinuso, valid_proprioo, valid_eyetracking, valid_wasi, valid_diffusion
+valid_cfacei means in-scanner, valid_cfaceo means out-of-scanner
 age_years: number
 sex: 1 male, 2 female
 fsiq2: number
@@ -18,15 +20,14 @@ dx_dsm___1   to   dx_dsm__6: diagnosis after interview
 Education: 1, Didn't finish HS; 2, High school; 3, Non-university qualification; 4, Bachelor's; 5, Master's; 6, Doctorate
 """
 
-import numpy as np, pandas as pd, matplotlib.pyplot as plt
+import numpy as np, pandas as pd
 from datetime import datetime
 
 ### SETTABLE PARAMETERS ###
 pc='home' #'laptop', 'home'
-files_source='NEWYSNG' #'local' for local machine, or else 'NEWYSNG'
+files_source='local' #'local' for local machine, or else 'NEWYSNG'
 
-
-if pc=='laptop':
+if pc=='laptop' and files_source=='NEWYSNG':
     data_folder="Z:\\Shiami_DICOM\\Psychosis\\PCNS"
 elif pc=='home':
     intermediates_folder='D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates'
@@ -35,8 +36,13 @@ elif pc=='home':
     elif files_source == 'local':
         data_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw"
 redcap_folder="G:\\My Drive\\PhD\\Project_PCNS\\BackupRedcap"
-redcap_file = "CogEmotPsych_DATA_2023-05-07_1336.csv"
+redcap_file = "PCNS_redcap_data_table_01.csv"
 IQ_cutoff = [80,150] #consider [80/85 to 120/125]
+
+### CONSTANT VARIABLES ###
+aus_labels = ['AU01','AU02','AU04','AU05','AU06','AU07','AU09','AU10','AU12','AU14','AU15','AU17','AU20','AU23','AU25','AU26'] #not including AU45 which is blink
+aus_names = ['InnerBrowRaiser','OuterBrowRaiser','BrowLowerer','UpperLidRaiser','CheekRaiser','LidTightener','NoseWrinkler','UpperLipRaiser','LipCornerPuller','Dimpler','LipCornerDepressor','ChinRaiser','LipStretcher','LipTightener','LipParts','JawDrop']
+n_aus = len(aus_labels)
 
 ### SETUP ###
 
@@ -81,8 +87,9 @@ healthy_DidMRIPlusFuture = (healthy_didmri_inc | healthy_future)
 clinical_DidMRIPlusFuture = (clinical_didmri_inc | clinical_future)
 
 sz_didmri_inc = (clinical_didmri_inc) & (t.dx_dsm___1==1) #schizophrenia, did mri
+sz_attended_inc = (clinical_attended_inc) & (t.dx_dsm___1==1) #schizophrenia, attended
 sza_didmri_inc= (clinical_didmri_inc) & (t.dx_dsm___2==1) #schizoaffective, did mri
-
+sza_attended_inc= (clinical_attended_inc) & (t.dx_dsm___2==1) #schizoaffective, attended
 
 panss_labels_P = [f'panss_p{i}' for i in range(1,8)] #panss positive symptom scamri_include_alltasksle
 panss_labels_N = [f'panss_n{i}' for i in range(1,8)] #panss negative

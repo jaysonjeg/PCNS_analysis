@@ -12,10 +12,14 @@ import subprocess
 
 vids_folder='D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw\\PCNS_067_BL\\beh\\cface1_067_Ta_HFbR_MidHA_2022_Oct_13_0915'#source videos
 
+vids_folder = "D:\\FORSTORAGE\\EmotionDatabases\\Karolinska Directed Faces\\I. KDEF-dyn I\\I. KDEF-dyn I\\S4 Stimuli (Video-clips)\\1_Neutral-Happiness"
 
 
 vidnames=['cface1_067_Ta_HFbR_MidHA_2022_Oct_13_0915_cam_20fps.avi']
-out_folder=f'{vids_folder}\OpenFace' #where to save
+
+vidnames=['F01-NE-HA.mp4']
+
+out_folder=f'{vids_folder}\OpenFace_static' #where to save
 
 #laptop
 #openfacefolder='C:/Users/c3343721/Desktop/FaceThings/OpenFace-master' 
