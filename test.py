@@ -8,17 +8,17 @@ Then find correlation between the original function and the filtered function
 import numpy as np
 import matplotlib.pyplot as plt
 
-def make_bump_function(N=1000):
+def make_bump_function(N=1000,width=1):
     #Make a 1 dimensional function with a single 'bump' - a truncated sine wave
     x = np.linspace(-4*np.pi, 4*np.pi, N)
-    y = np.sin(x)
-    bump_boundary = [0,np.pi]
+    y = np.sin(x/width)
+    bump_boundary = [0,np.pi*width]
     x_outside_boundary = np.where((x<bump_boundary[0]) | (x>bump_boundary[1]))[0]
     y[x_outside_boundary] = 0
     return x,y
 
 N=1000 #number of time points
-x,y=make_bump_function(N)
+x,y=make_bump_function(N,width=0.3)
 yf = np.fft.rfft(y)
 power_spectrum = np.abs(yf)**2
 freq = np.fft.rfftfreq(y.shape[-1])

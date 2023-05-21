@@ -1,12 +1,13 @@
 import numpy as np
 from matplotlib import pyplot as plt
-import warnings
 from scipy.interpolate import interp1d
+from sklearn.decomposition import PCA
+import warnings
 
-def plot_this_au(df,ax,times,aust,this_AU='AU12'):
+def plot_this_au(df,ax,times,aust,this_AU='AU12',color='green'):
     #Plot AU12 time series with annotations. Blue lines are happy trigger. Red lines are angry trigger
     ax.set_title(this_AU)
-    ax.plot(times,aust[this_AU],color='green')
+    ax.plot(times,aust[this_AU],color=color)
     ax.set_xlim(left=0,right=530) #max 530     
     for i in df['trigger_onset'][df.ptemot=='HA'].values:
         ax.axvline(x=i,color='mediumpurple') 
@@ -59,6 +60,13 @@ def find_vals_between(start_frames,end_frames,aus):
         end=end_frames[i]
         values[i] = aus.iloc[start:end,:]
     return values
+
+def get_pca(list_of_arrays):
+    array = np.vstack(list_of_arrays)
+    pca=PCA()
+    pca.fit(array)
+    return pca
+
 def pca_comp0_direction_correct(target_fps,values_resampled,pca):
     #Check the direction of the first principal component. Return whether it increases from trigger onset to middle of stimMove
     mid_stimMove_frame = target_fps * 2 #approximate no of frames from trigger to middle of stimMove
@@ -70,49 +78,23 @@ def calculate_averages(lst):
     #Given a list of numbers, return a list of the averages of consecutive pair of numbers
     return [np.mean([lst[i],lst[i+1]]) for i in range(len(lst)-1)]
 
-def get_mean_post_trigger_time_series(df,interp_aus,target_fps,relevant_timegaps,emotion='HA'):
-    trigger2trialend_secs = sum(relevant_timegaps)
-    times_trial_regular = np.arange(0,trigger2trialend_secs,1/target_fps) #new timestamps for resampling
-    start_times = df['trigger_onset'][df.ptemot==emotion].values
+def get_all_post_trigger_time_series(df,interp_aus,times_trial_regular,emotion='ha'):
+    start_times = df['trigger_onset'][df.ptemot==emotion.upper()].values
     times_pertrial = np.array([times_trial_regular for i in range(len(start_times))]) #with 0 at each trigger
     times_pertrial_true = np.array([start_time + times_trial_regular for start_time in start_times]) #holds resampled timestamps for each trial
-    values_pertrial = np.array([interp_aus(times) for times in times_pertrial_true]) #AU values for all times between 'start' and 'end'  
+    aus_trial = np.array([interp_aus(times) for times in times_pertrial_true]) #AU values for all times between 'start' and 'end'  
     times_alltrials = np.concatenate(times_pertrial)
     #times_alltrials = np.tile(times_trial_regular,len(start_times))
-    values_alltrials = np.vstack(values_pertrial) 
-    values_pertrial_mean = np.mean(values_pertrial,axis=0) #mean AU time series for each trial
-    f = interp1d(times_alltrials, values_alltrials, axis=0, kind='linear',fill_value = 'extrapolate')
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
-        values_resampled = f(times_trial_regular) #array (nframes*nAUs) containing mean AU time series, based on all trials concatenated, then resampled
-    zerotime_indices = np.where(times_alltrials==0)[0] #manually replace nans at time zero with the mean of values at that time
-    zerotime_values = values_alltrials[zerotime_indices,:].mean(axis=0)
-    values_resampled[0,:]=zerotime_values #RETURN (but looks weird)
-    return times_pertrial,values_pertrial,times_trial_regular,values_resampled,values_pertrial_mean
+    return aus_trial
 
-def get_mean_post_trigger_time_series2(df,aus,target_fps,relevant_timegaps,emotion='HA'):
-    """
-    As above, but without using pre-interpolated data
-    """
-    start_times = df['trigger_onset'][df.ptemot==emotion].values
-    trigger2trialend_secs = sum(relevant_timegaps)
-    end_times = [i+trigger2trialend_secs for i in start_times]
-    times_pertrial = np.empty(len(start_times),dtype='object') #holds timestamps for each trial
-    values_pertrial = np.empty(len(start_times),dtype='object') #array (ntrials) of arrays (ntimepoints*nAUs) containing AU time series for that trial
-    for i in range(len(start_times)):
-        start = start_times[i]
-        end = end_times[i]
-        included = (times_eachframe>=start) & (times_eachframe<=end)
-        times_pertrial[i] = times_eachframe[included] - start #timestamps corresponding to these AUs, where 'start' is set to 0
-        values_pertrial[i] = aus[included] #AU values for all times between 'start' and 'end'  
-    times_alltrials = np.concatenate(times_pertrial)
-    values_alltrials = np.vstack(values_pertrial) 
+def get_mean_post_trigger_time_series(times_trial_regular,aus_trial):
+    values_alltrials = np.vstack(aus_trial) 
+    times_alltrials = np.tile(times_trial_regular,len(aus_trial))
     f = interp1d(times_alltrials, values_alltrials, axis=0, kind='linear',fill_value = 'extrapolate')
-    times_trial_regular = np.arange(0,trigger2trialend_secs,1/target_fps)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=RuntimeWarning)
         values_resampled = f(times_trial_regular) #array (nframes*nAUs) containing mean AU time series, based on all trials concatenated, then resampled
     zerotime_indices = np.where(times_alltrials==0)[0] #manually replace nans at time zero with the mean of values at that time
     zerotime_values = values_alltrials[zerotime_indices,:].mean(axis=0)
     values_resampled[0,:]=zerotime_values #RETURN (but looks weird)
-    return times_pertrial,values_pertrial,times_trial_regular,values_resampled
+    return values_resampled

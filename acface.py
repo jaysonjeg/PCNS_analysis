@@ -20,11 +20,10 @@ import matplotlib.pyplot as plt
 from acommon import *
 import acface_utils
 from scipy.interpolate import interp1d
-from sklearn.decomposition import PCA
-import warnings
 
 target_fps=20
 ntrials=80
+emots=['ha','an']
 static_or_dynamic = 'static' #whether au_static was used in OpenFace execution or not
 action_unit = 'AU12' #which action unit to plot
 min_success = 0.95 #minimum proportion of successful frames for a subject to be included
@@ -68,14 +67,6 @@ for subject in HC[0:1]:
     camtstart = face_summary['camtstart'] #time when webcam started recording
     camactualfps = face_summary['camactualfps'] #actual fps of webcam recording
 
-    """Outcome 1: Amplitude of smile or frown action post-trigger. Just use max(AU12) and (max(A12) - preTrigger(AU12))"""
-    aus_trigger2stimStop_HA=acface_utils.find_vals_between(df['trigger_camNframe'][df.ptemot=='HA'].values, df['fixation_camNframe'][df.ptemot=='HA'].values, aus) #all action unit values, between trigger and stimStop, when participants were asked to smile (HA)
-    aus_trigger2stimStop_HA_max = np.array([np.max(i) for i in aus_trigger2stimStop_HA])
-    aus_trigger2stimStop_HA_min = np.array([np.min(i) for i in aus_trigger2stimStop_HA])
-    aus_trigger2stimStop_HA_range = aus_trigger2stimStop_HA_max - aus_trigger2stimStop_HA_min
-    this_au_trigger2stimStop_HA_max = aus_trigger2stimStop_HA_max[:,this_AU_index] #RETURN
-    this_au_trigger2stimStop_HA_range = aus_trigger2stimStop_HA_range[:,this_AU_index] #RETURN
-
     """
     From out.csv log file, get all pairs of (time,framenumber). Interpolate between frames to calculate a time since onset for each frame number in webcam data. Now the action unit time series is indexed by timestamp instead of frame number. Then interpolate timestamps to resample the AU time series at regular intervals of exactly 20fps.
     """
@@ -89,17 +80,20 @@ for subject in HC[0:1]:
     aust.columns=aus.columns
 
     """PCA of action unit time series between trigger and stimStop when participants were asked to smile (HA)"""
-    array = np.vstack(aus_trigger2stimStop_HA)
-    pca = PCA()
-    pca.fit(array)
-    comp0 = pca.components_[0]
-    aus_pca = pca.transform(aus)
-    aus_pca = pd.DataFrame(aus_pca)
-    aus_pca.columns = [f'comp{i}' for i in range(aus_pca.shape[1])]
-    aust_pca = pca.transform(aust)
-    aust_pca = pd.DataFrame(aust_pca)
-    aust_pca.columns = [f'comp{i}' for i in range(aust_pca.shape[1])] 
-    #interp_aus_pca = interp1d(times_eachframe,aus_pca,axis=0,kind='linear',fill_value = 'extrapolate')
+
+    def pca_transform(pca,values):
+        result=pca.transform(values)
+        result=pd.DataFrame(result)
+        result.columns = [f'comp{i}' for i in range(result.shape[1])]
+        return result
+
+    pca,comp0,aus_pca,aust_pca={},{},{},{}
+    for emot in emots:
+        pca[emot] = acface_utils.get_pca(aus_trigger2stimStop[emot])
+        comp0[emot] = pca[emot].components_[0]
+        aus_pca[emot] = pca_transform(pca[emot],aus)
+        aust_pca[emot] = pca_transform(pca[emot],aust)
+    #interp_aus_pca = interp1d(times_eachframe,aus_pca['ha'],axis=0,kind='linear',fill_value = 'extrapolate')
 
     """
     Get mean time series from trigger to next Instruct, averaged across trials, when they're asked to smile (HA) or frown(AN) separately. Get this for each action unit, and for first principal component. Could use these as fMRI regressor
@@ -109,18 +103,54 @@ for subject in HC[0:1]:
     relevant_labels=['trigger','post_trigger','stimMove','fixation','next_instruct']
     relevant_timestamps = np.cumsum(relevant_timegaps)
     midpoint_timestamps = acface_utils.calculate_averages(relevant_timestamps)   
+    times_trial_regular = np.arange(0,relevant_timestamps[-1],1/target_fps) #new timestamps for resampling
 
-    times_pertrial,values_pertrial,times_trial_regular,values_resampled,values_pertrial_mean = acface_utils.get_mean_post_trigger_time_series(df,interp_aus,target_fps,relevant_timegaps,emotion='HA')
+    aus_trial,comp0_trial,values_resampled,aus_trial_mean={},{},{},{}
+    """
+    Each variable above is a dictionary with keys 'ha' and 'an', for when pt was asked to smile or frown
+    aus_trial['ha'] is n_smiletrials (40) * n_frames (80) * nAUs (16)
+    """
+    for emot in emots:
+        aus_trial[emot] = acface_utils.get_all_post_trigger_time_series(df,interp_aus,times_trial_regular,emotion=emot)
+        comp0_trial[emot] = np.vstack([pca[emot].transform(i)[:,0] for i in aus_trial[emot]]) #n_smiletrials * n_frames
+        aus_trial_mean[emot]=np.mean(aus_trial[emot],axis=0) #mean across trials
 
-    comp0_pertrial = [pca.transform(i)[:,0] for i in values_pertrial]
+        values_resampled[emot] = acface_utils.get_mean_post_trigger_time_series(times_trial_regular,aus_trial[emot])
+
+    """Outcome 1: Amplitude of smile or frown action post-trigger. Just use max(AU12) and (max(A12) - preTrigger(AU12))"""
+    aus_trial_ha_max = np.max(aus_trial['ha'],axis=1)
+    aus_trial_ha_min = np.min(aus_trial['ha'],axis=1)
+    aus_trial_ha_range = aus_trial_ha_max - aus_trial_ha_min
+    this_au_trial_ha_max = aus_trial_ha_max[:,this_AU_index] #RETURN
+    this_au_trial_ha_range = aus_trial_ha_range[:,this_AU_index] #RETURN
+
+
+
+    fig,ax=plt.subplots()
+    ax.plot(this_au_trigger2stimStop_HA_max,color='red')
+    ax.plot(this_au_trial_ha_max,color='blue')
+    ax.set_title('max')
+
+    fig,ax=plt.subplots()
+    ax.plot(this_au_trigger2stimStop_HA_range,color='red')
+    ax.plot(this_au_trial_ha_range,color='blue')
+    ax.set_title('range')
+
+
+
+
+
+    emot='ha'
+    values = aus_trial[emot][:,:,this_AU_index]
+    #values = comp0_trial[emot]
 
     fig,axs=plt.subplots(nrows=4,ncols=4)
     fig.set_size_inches(18,8)
     for i in range(16): #plot examples of time series from a few trials
         ax = axs[np.unravel_index(i,(4,4))]
-        #ax.plot(times_pertrial[i,:],values_pertrial[i,:,this_AU_index],color='blue')
-        #ax.set_ylim(0,3)
-        ax.plot(times_pertrial[i,:],comp0_pertrial[i],color='blue')
+        ax.plot(times_trial_regular,values[i,:],color='blue')
+        if np.min(values) >= 0:
+            ax.set_ylim(0,3)
         for j in relevant_timestamps:
             ax.axvline(x=j) 
         for i,annotation in enumerate(relevant_labels):
@@ -128,10 +158,10 @@ for subject in HC[0:1]:
     fig.tight_layout()
 
     fig,ax=plt.subplots()
-    for i in range(len(times_pertrial)):
-        ax.plot(times_pertrial[i,:],values_pertrial[i,:,this_AU_index],color='blue',linewidth=0.2)
-    ax.plot(times_trial_regular,values_resampled[:,this_AU_index],color='r',linewidth=1) #plot mean time series
-    ax.plot(times_trial_regular,values_pertrial_mean[:,this_AU_index],color='k',linewidth=1) #plot mean time series
+    for i in range(aus_trial[emot].shape[0]):
+        ax.plot(times_trial_regular,aus_trial[emot][i,:,this_AU_index],color='blue',linewidth=0.2)
+    ax.plot(times_trial_regular,values_resampled[emot][:,this_AU_index],color='r',linewidth=1) #plot mean time series
+    ax.plot(times_trial_regular,aus_trial_mean[emot][:,this_AU_index],color='k',linewidth=1) #plot mean time series
     #ax.set_ylim(0,3)
     for j in relevant_timestamps:
         ax.axvline(x=j) 
@@ -139,43 +169,25 @@ for subject in HC[0:1]:
         ax.text(midpoint_timestamps[i],-0.5,annotation,ha='center')
     fig.tight_layout()
 
-    '''
-    times_pertrial2,values_pertrial2,times_trial_regular2,values_resampled2 = acface_utils.get_mean_post_trigger_time_series2(df,aus,target_fps,relevant_timegaps,emotion='HA')
+
+
+
+
     
-    fig,axs=plt.subplots(nrows=4,ncols=4)
-    fig.set_size_inches(18,8)
-    for i in range(16): #plot examples of time series from a few trials
-        ax = axs[np.unravel_index(i,(4,4))]
-        ax.plot(times_pertrial2[i],values_pertrial2[i][this_AU].values,color='blue')
-        ax.set_ylim(0,3)
-        for j in relevant_timestamps:
-            ax.axvline(x=j) 
-    fig.tight_layout()
-    fig,ax=plt.subplots()
-    for i in range(len(times_pertrial2)):
-        ax.plot(times_pertrial2[i],values_pertrial2[i][this_AU].values,color='blue')
-    ax.plot(times_trial_regular2,values_resampled2[:,this_AU_index],color='r') #plot mean time series
-    ax.set_ylim(0,3)
-    for j in relevant_timestamps:
-        ax.axvline(x=j) 
-    '''
-
-    assert(acface_utils.pca_comp0_direction_correct(target_fps,values_pertrial_mean,pca))
-
-
-    '''
     fig,ax=plt.subplots()
     fig.set_size_inches(18,3) #40,5
     acface_utils.plot_this_au(df,ax,times_regular,aust,this_AU='AU12')
     acface_utils.plot_all_aus(df,times_regular,aust)
     fig,ax=plt.subplots()
     fig.set_size_inches(18,3) #40,5
-    acface_utils.plot_this_au(df,ax,times_regular,aust_pca,this_AU='comp0')
-    acface_utils.plot_all_aus(df,times_regular,aust_pca)
+    acface_utils.plot_this_au(df,ax,times_regular,aust_pca['ha'],this_AU='comp0',color='blue')
+    acface_utils.plot_this_au(df,ax,times_regular,aust_pca['an'],this_AU='comp0',color='red')
+    #acface_utils.plot_all_aus(df,times_regular,aust_pca['ha'])   
+    #acface_utils.plot_all_aus(df,times_regular,aust_pca['an'])
     #print([[aus_names[i],comp0[i]] for i in range(len(comp0))] )
-    '''
+    
     plt.show()
-
+    assert(acface_utils.pca_comp0_direction_correct(target_fps,aus_trial_mean[emot],pca[emot]))
 
     #Plot to see whether response amplitudes are decreasing with time due to tiredness
     """
@@ -187,14 +199,14 @@ for subject in HC[0:1]:
     # Plot how PCA components map onto action units
     """
     fig, ax = plt.subplots()
-    im = ax.imshow(pca.components_.T)
+    im = ax.imshow(pca['ha'].components_.T)
     cbar = ax.figure.colorbar(im, ax=ax)
     ax.set_xlabel('AU')
     ax.set_yticks(np.arange(len(aus_names)))
     ax.set_yticklabels(aus_names)
-    ax.set_xticks(np.arange(len(aus_pca.columns)))
+    ax.set_xticks(np.arange(len(aus_pca['ha'].columns)))
     ax.set_xlabel('Component')
-    ax.set_xticklabels([i[-1] for i in aus_pca.columns])
+    ax.set_xticklabels([i[-1] for i in aus_pca['ha'].columns])
     """
 
 
