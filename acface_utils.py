@@ -3,13 +3,14 @@ from matplotlib import pyplot as plt
 from scipy.interpolate import interp1d
 from sklearn.decomposition import PCA
 import warnings
+import acommon
 
 def plot_this_au(df,ax,times,aust,this_AU='AU12',color='green',label=None):
     #Plot AU12 time series with annotations. Blue lines are happy trigger. Red lines are angry trigger
     ax.set_title(this_AU)
     ax.plot(times,aust[this_AU],color=color,label=label)
     ax.set_xlim(left=0,right=530) #max 530  
-    ax.set_legend()   
+    ax.legend()   
     for i in df['trigger_onset'][df.ptemot=='HA'].values:
         ax.axvline(x=i,color='mediumpurple') 
     for i in df['trigger_onset'][df.ptemot=='AN'].values:
@@ -36,7 +37,7 @@ def plot_all_aus(df,times,aust):
         plot_this_au(df,ax,times,aust,aust.columns[i])
     fig.tight_layout()
 
-def plot_this_au_trial(values,title):
+def plot_this_au_trial(values,title,times_trial_regular,relevant_timestamps,relevant_labels,midpoint_timestamps):
     #plot single-AU time series for a few trials, each in a separate panel
     #values should be array size ntrials (40) * nframes (80)
     fig,axs=plt.subplots(nrows=4,ncols=4)
@@ -54,6 +55,84 @@ def plot_this_au_trial(values,title):
     fig.suptitle(title)
     fig.tight_layout()
 
+def plot_this_au_trial_superimposed(emot,index,title,aus_trial,aus_trial_mean,aus_trial_mean2,relevant_timestamps,relevant_labels,midpoint_timestamps,times_trial_regular):
+    #On a single plot, plot each trial's single-AU time series in blue, then mean time course in black
+    fig,ax=plt.subplots()
+    for i in range(aus_trial[emot].shape[0]):
+        ax.plot(times_trial_regular,aus_trial[emot][i,:,index],color='blue',linewidth=0.2)
+    ax.plot(times_trial_regular,aus_trial_mean[emot][:,index],color='k',linewidth=1,label='mean') #plot mean time series
+    ax.plot(times_trial_regular,aus_trial_mean2[emot][:,index],color='r',linewidth=1,label='mean2') #plot mean time series, alternate method
+    ax.legend()
+    ax.set_title(title)
+    #ax.set_ylim(0,3)
+    for j in relevant_timestamps:
+        ax.axvline(x=j) 
+    for i,annotation in enumerate(relevant_labels):
+        ax.text(midpoint_timestamps[i],-0.5,annotation,ha='center')
+    fig.tight_layout()
+
+
+def find_duplicate_indices(lst):
+    #In list lst, for each item that appears more than once, return the indices of all its appearances after the first appearance
+    seen = set()
+    duplicate_indices = []
+    for index, item in enumerate(lst):
+        if item in seen:
+            duplicate_indices.append(index)
+        else:
+            seen.add(item)
+    return duplicate_indices
+
+def moving_average(x,window_length):
+    #window_length should be odd number. Pads left and right with values on the end
+    assert(window_length%2==1)
+    kernel = np.ones(window_length) / window_length
+    temp = np.convolve(x,kernel,'valid')
+    n = int((window_length-1)/2)
+    result = np.zeros(len(x),dtype=float)
+    result[0:n] = [temp[0]]*n
+    result[-n:] = [temp[-1]]*n
+    result[n:-n] = temp
+    return result
+
+def find_closest_peakdip(x, t,peak_or_dip,left_or_right,hillclimb=True):
+    #Given time series x and index t, find index of closest peak to the right of t
+    if left_or_right=='right':
+        iterator = range(t,len(x))
+    elif left_or_right=='left':
+        iterator = range(t,0,-1)
+    for n in iterator:
+        if hillclimb:
+            current=x[n]
+            if left_or_right=='right':
+                comparator = x[n+1]
+            elif left_or_right=='left':
+                comparator = x[n-1]
+            if peak_or_dip=='peak' and comparator < current:
+                return n
+            elif peak_or_dip=='dip' and comparator > current:
+                return n
+        else:
+            if peak_or_dip=='peak':
+                if x[n] > x[n-1] and x[n] > x[n+1]:
+                    return n
+            if peak_or_dip=='dip':
+                if x[n] < x[n-1] and x[n] < x[n+1]:
+                    return n
+
+    return None #no dip found
+
+def rescale(x):
+    min_val = np.min(x)
+    max_val = np.max(x)
+    rescaled_x = (x - min_val) / (max_val - min_val)
+    return rescaled_x 
+
+def get_range(vals,indices):
+    p,q=min(indices),max(indices)
+    if p==q: return vals[p]
+    else: return vals[p:q]
+    
 def get_all_timestamps_and_framestamps(df,ntrials):
     event_names = ['instruct','postinstruct','trigger','posttrigger','stimMove','fixation'] #names of events in log file
     times = np.zeros(1+ntrials*len(event_names),dtype='float')
@@ -82,7 +161,7 @@ def find_vals_between(start_frames,end_frames,aus):
 
 def get_pca(list_of_arrays):
     array = np.vstack(list_of_arrays)
-    pca=PCA()
+    pca=PCA(n_components = acommon.n_aus)
     pca.fit(array)
     return pca
 

@@ -8,11 +8,12 @@ import re, os, subprocess
 from acommon import *
 
 #Settable parameters
-taskname='cface1_*_Ta_H*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
+taskname='cface1_*_Ta_*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
+
 run_duration = np.inf #stop after this time (seconds)
 show_plot=False #show AU 12 time series per participant
 
-task_dict={'movieDI_*_Ta_F_Ricky*':'movieDI', 'cface1_*_Ta_H*':'cface1'} #mapping from 'taskname' to the label in OpenFace output file
+task_dict={'movieDI_*_Ta_F_Ricky*':'movieDI', 'cface1_*_Ta_*':'cface1'} #mapping from 'taskname' to the label in OpenFace output file
 
 
 if pc=='laptop':
@@ -21,8 +22,17 @@ elif pc=='home':
     openfacefolder='D:/FORSTORAGE/OpenFace-master'
 openfacefile=f'{openfacefolder}/OpenFace-master/x64/Release/FeatureExtraction.exe'
 
+"""
+print(len(files_with_task))
+print(files_with_task[0:2])
+assert(0)
+"""
+
 files_with_task=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{taskname}\\")
 files_with_task_and_video=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{taskname}\\*.avi")
+files_with_task = [i for i in files_with_task if 'Ta_M' not in i]
+files_with_task_and_video = [i for i in files_with_task_and_video if 'Ta_M' not in i]
+
 assert(len(files_with_task)==len(files_with_task_and_video))
 subjects=[re.search('PCNS_(.*)_BL',file).groups()[0] for file in files_with_task] #gets all subject names who have data for the given task
 
@@ -39,7 +49,7 @@ c=acommon.clock()
 for subject in subjects_with_task:
     for extract_type in ['static','dynamic']:
 
-        out_folder=f'{intermediates_folder}\\{subject}\\{task_dict[taskname]}\\OpenFace_{extract_type}'
+        out_folder=f'{intermediates_folder}\\per_subject\\{subject}\\{task_dict[taskname]}\\OpenFace_{extract_type}'
         if os.path.exists(out_folder):
             print(f'{c.time()[1]}: {subject} {extract_type} ALREADY EXISTS')
         else:
