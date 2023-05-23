@@ -28,6 +28,7 @@ from scipy.interpolate import interp1d
 
 target_fps=20
 ntrials=80
+n_trialsperemotion=40
 emots=['ha','an']
 static_or_dynamic = 'static' #whether au_static was used in OpenFace execution or not
 action_unit = 'AU12' #which action unit to plot
@@ -133,19 +134,22 @@ for subject in SZ[1:2]:
 
     """Outcome 2: Latency"""
 
+    au_index = 0 #0 for pca or ha_AU_index for AU12
+    values = aus_trial_pca['an'][:,:,au_index] #n_trialsperemotion (40) * n_frames (80)
+
     #Timepoints to compare to make sure valid facial response was detected
     default_indices_lower = [5] #250ms after trigger (optionally add at start of nextInstruct to make sure they look normal again)
-    default_indices_upper = [np.where(times_trial_regular==m)[0][0] for m in [0.5+1.25+0.75]] #midway through stimMove
- 
-    emot='an'
-    values = aus_trial_pca[emot][:,:,0] #n_trials (40) * n_frames (80)
+    default_indices_upper = [int(target_fps*m) for m in [0.5+1.25+0.75]] #midway through stimMove 
 
     nrows,ncols=5,2 #plot some trials as examples
     fig,axs=plt.subplots(nrows=nrows,ncols=ncols)
     fig.set_size_inches(18,8)
-    for i in range(nrows*ncols): 
-        ii = i+values.shape[0]-nrows*ncols #i for first few trials, or i+values.shape[0]-12 for last few trials
-        ts = values[ii,:] #time series for one trial. array of size n_frames (80)
+
+    results=np.zeros((n_trialsperemotion,4),dtype=float)
+    results[:]=np.nan
+    for i in range(n_trialsperemotion): 
+        #ii = i+n_trialsperemotion-nrows*ncols #i for first few trials, or i+n_trialsperemotion-10 for last few trials
+        ts = values[i,:] #time series for one trial. array of size n_frames (80)
 
         ts_5 = acface_utils.moving_average(ts,window_length=5) #smoothed time series (5 data points = 250ms)
         ts_9 = acface_utils.moving_average(ts,window_length=9) #(9 data points = 450ms)
@@ -169,22 +173,25 @@ for subject in SZ[1:2]:
         index_est_minus = index_est - int(0.3 * target_fps) #0.25s before estimated 'action time'
         index_est_plus = index_est + int(0.3 * target_fps) #0.25s after
 
-        jitter=0.007
-        ax = axs[np.unravel_index(i,(nrows,ncols))]
-        ax.plot(times_trial_regular,ts,color='black')
-        ax.set_title(f'Trial {ii}')  
-        if np.min(values) >= 0:
-            ax.set_ylim(0,3)
-        #for j in relevant_timestamps: ax.axvline(x=j,color='black')         
-        for k,annotation in enumerate(relevant_labels):
-            ax.text(midpoint_timestamps[k],np.min(ts),annotation,ha='center')
-        ax.axvline(x=times_trial_regular[index_est]+0*jitter,color='black',linestyle='dashed')
+        if i < nrows*ncols:
+            jitter=0.007
+            ax = axs[np.unravel_index(i,(nrows,ncols))]
+            ax.plot(times_trial_regular,ts,color='black')
+            ax.set_title(f'Trial {i}')  
+            if np.min(values) >= 0:
+                ax.set_ylim(0,3)
+            #for j in relevant_timestamps: ax.axvline(x=j,color='black')         
+            for k,annotation in enumerate(relevant_labels):
+                ax.text(midpoint_timestamps[k],np.min(ts),annotation,ha='center')
+            ax.axvline(x=times_trial_regular[index_est]+0*jitter,color='black',linestyle='dashed')
 
-        if (index_est_plus <= len(ts) and index_est_minus >= 0): #check that the estimated peak is not too close to start or end
+        if (index_est_plus <= len(ts)-1 and index_est_minus >= 0): #check that the estimated peak is not too close to start or end
             indices_lower = default_indices_lower+[index_est_minus]
             indices_upper = default_indices_upper+[index_est_plus]
-            for j in indices_lower: ax.axvline(x=times_trial_regular[j],color='orange')
-            for j in indices_upper: ax.axvline(x=times_trial_regular[j],color='blue')
+
+            if i < nrows*ncols:
+                for j in indices_lower: ax.axvline(x=times_trial_regular[j],color='orange')
+                for j in indices_upper: ax.axvline(x=times_trial_regular[j],color='blue')
             vals_indices_lower = [ts[m] for m in indices_lower] 
             vals_indices_upper = [ts[m] for m in indices_upper]
 
@@ -194,7 +201,8 @@ for subject in SZ[1:2]:
             lower_max = max(acface_utils.get_range(ts,indices_lower)) #max value between trigger and index_est_minus
             upper_min = min(acface_utils.get_range(ts,indices_upper)) #min value between index_est_plus and middle of stimMov
             if lower_max < upper_min: #check that max_group's values are all larger than all of min_group's values
-                ax.axvline(0.1,color='grey',linewidth=30,alpha=0.5) #grey bar indicates valid facial response in the trial
+                if i < nrows*ncols: 
+                    ax.axvline(0.1,color='grey',linewidth=30,alpha=0.5) #grey bar indicates valid facial response in the trial
                 
                 #from estimated point of maximum gradient (index_est), move leftward along smoothed time series (ts_9) until values stop decreasing. This is a first estimate of facial response initiation (index_left). Then, move right from this first estimate until you find a local maximum in the 2nd derivative of the smoothed time series (ts_5_dx2). This index_left2 is the final estimate. Do the same 2 steps rightward to find response termination point. Also, make sure that final estimates don't cross index_est again.
                 index_left = acface_utils.find_closest_peakdip(ts_9,index_est,'dip','left',hillclimb=True)
@@ -212,17 +220,19 @@ for subject in SZ[1:2]:
                 index_right2 = index_est + np.argmin(ts_5_dx2[index_est:index_right])
                 """
 
-                latency = times_trial_regular[index_left2]
-                duration = times_trial_regular[index_right2] - latency
+                response_start = times_trial_regular[index_left2]
+                response_midtime = times_trial_regular[index_est]
+                response_end = times_trial_regular[index_right2]
                 maximum_gradient = np.max(grad_5[index_left2:index_right2])
+                results[i,:] = [response_start,response_midtime,response_end,maximum_gradient]
 
+                if i < nrows*ncols:
+                    ax.axvline(x=times_trial_regular[index_left]+0*jitter,color='green') #initial estimate of response initiation
+                    ax.axvline(x=times_trial_regular[index_right]+0*jitter,color='red') #initial estimate of response termination
+                    ax.axvline(x=times_trial_regular[index_left2]+1*jitter,color='green',linestyle='dashed') #final estimate of response initiation
+                    ax.axvline(x=times_trial_regular[index_right2]+1*jitter,color='red',linestyle='dashed') #final estimate of response termination
 
-
-                ax.axvline(x=times_trial_regular[index_left]+0*jitter,color='green') #initial estimate of response initiation
-                ax.axvline(x=times_trial_regular[index_right]+0*jitter,color='red') #initial estimate of response termination
-                ax.axvline(x=times_trial_regular[index_left2]+1*jitter,color='green',linestyle='dashed') #final estimate of response initiation
-                ax.axvline(x=times_trial_regular[index_right2]+1*jitter,color='red',linestyle='dashed') #final estimate of response termination
-    fig.tight_layout()
+    if i < nrows*ncols: fig.tight_layout()
 
     plt.show()
 
