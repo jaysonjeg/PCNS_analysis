@@ -9,9 +9,9 @@ Get the following metrics of facial movement for each subject:
 2) Distribution of latency post-trigger for the smile or frown action. Look at distribution and exclude outliers
 3) Mean time series from trigger to next Instruct, averaged across trials, when they're asked to smile (HA) or frown(AN) separately. Get this for each action unit. Could use these as fMRI regressor
 4) Point 3 but for first principal component
+5) Maximum value of first derivative for AU12
 
 Deal with amplitude as confounder
-Max of first derivative??
 
 Issues:
 - Many trials have no response. No sudden uptick. So average time series may not be accurate
@@ -43,7 +43,7 @@ SZ = ((sz_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #schizophreni
 SZA = ((sza_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #schizoaffective subgroup
 HC,PT,SZ,SZA = subs[HC],subs[PT],subs[SZ],subs[SZA]
 
-for subject in SZ[1:2]:
+for subject in SZ[0:1]:
     """Get the OpenFace intermediates .csv for this subject"""
     contents = glob(f"{intermediates_folder}\\per_subject\\{subject}\\cface1\\")
     assert(len(contents)==1)
@@ -97,6 +97,7 @@ for subject in SZ[1:2]:
     midpoint_timestamps = acface_utils.calculate_averages(relevant_timestamps)   
     times_trial_regular = np.arange(0,relevant_timestamps[-1],1/target_fps) #new timestamps for resampling
 
+
     """
     Outcome 3:
     Each variable below is a dictionary with keys 'ha' and 'an', for when pt was asked to smile or frown
@@ -131,112 +132,20 @@ for subject in SZ[1:2]:
         aus_pca[emot] = acface_utils.pca_transform(pca[emot],aus) 
         aust_pca[emot] = acface_utils.pca_transform(pca[emot],aust) 
     #interp_aus_pca = interp1d(times_eachframe,aus_pca['ha'],axis=0,kind='linear',fill_value = 'extrapolate')  
+    assert(acface_utils.pca_comp0_direction_correct(target_fps,aus_trial_mean[emot],pca[emot]))
 
     """Outcome 2: Latency"""
 
-    au_index = 0 #0 for pca or ha_AU_index for AU12
-    values = aus_trial_pca['an'][:,:,au_index] #n_trialsperemotion (40) * n_frames (80)
-
-    #Timepoints to compare to make sure valid facial response was detected
-    default_indices_lower = [5] #250ms after trigger (optionally add at start of nextInstruct to make sure they look normal again)
-    default_indices_upper = [int(target_fps*m) for m in [0.5+1.25+0.75]] #midway through stimMove 
-
-    nrows,ncols=5,2 #plot some trials as examples
-    fig,axs=plt.subplots(nrows=nrows,ncols=ncols)
-    fig.set_size_inches(18,8)
-
-    results=np.zeros((n_trialsperemotion,4),dtype=float)
-    results[:]=np.nan
-    for i in range(n_trialsperemotion): 
-        #ii = i+n_trialsperemotion-nrows*ncols #i for first few trials, or i+n_trialsperemotion-10 for last few trials
-        ts = values[i,:] #time series for one trial. array of size n_frames (80)
-
-        ts_5 = acface_utils.moving_average(ts,window_length=5) #smoothed time series (5 data points = 250ms)
-        ts_9 = acface_utils.moving_average(ts,window_length=9) #(9 data points = 450ms)
-
-        grad = np.gradient(ts) #gradient of time series
-        grad_5 = np.gradient(ts_5) #gradient of smoothed time series
-        grad_9=np.gradient(ts_9)
-        #index_gradmax = np.argmax(grad) #index of maximum gradient
-        index_9_gradmax = np.argmax(grad_9) #index of maximum gradient of smoothed time series
-        #grad_smoo5 = acface_utils.moving_average(grad,window_length=5) #smoothed gradient
-        #index_gradsmoomax = np.argmax(grad_smoo5) #index of maximum of smoothed gradient
-
-        #dx2=np.gradient(grad) #second derivative
-        ts_5_dx2 = np.gradient(grad_5)
-        #ts_9_dx2 = np.gradient(grad_9)
-        #dx2_smoo5 = acface_utils.moving_average(dx2,window_length=5)
-        #dx2_smoo9 = acface_utils.moving_average(dx2,window_length=9)
-
-        #AU intensity should be higher during stimMov and 0.25s after the estimated 'action time', compared to at trigger point or 0.25s before the estimated 'action time'. If these conditions are met, then this counts as a valid facial response. Indicate valid trials with thick grey line        
-        index_est = index_9_gradmax #estimated 'action time' is when gradient of smoothed time series is highest
-        index_est_minus = index_est - int(0.3 * target_fps) #0.25s before estimated 'action time'
-        index_est_plus = index_est + int(0.3 * target_fps) #0.25s after
-
-        if i < nrows*ncols:
-            jitter=0.007
-            ax = axs[np.unravel_index(i,(nrows,ncols))]
-            ax.plot(times_trial_regular,ts,color='black')
-            ax.set_title(f'Trial {i}')  
-            if np.min(values) >= 0:
-                ax.set_ylim(0,3)
-            #for j in relevant_timestamps: ax.axvline(x=j,color='black')         
-            for k,annotation in enumerate(relevant_labels):
-                ax.text(midpoint_timestamps[k],np.min(ts),annotation,ha='center')
-            ax.axvline(x=times_trial_regular[index_est]+0*jitter,color='black',linestyle='dashed')
-
-        if (index_est_plus <= len(ts)-1 and index_est_minus >= 0): #check that the estimated peak is not too close to start or end
-            indices_lower = default_indices_lower+[index_est_minus]
-            indices_upper = default_indices_upper+[index_est_plus]
-
-            if i < nrows*ncols:
-                for j in indices_lower: ax.axvline(x=times_trial_regular[j],color='orange')
-                for j in indices_upper: ax.axvline(x=times_trial_regular[j],color='blue')
-            vals_indices_lower = [ts[m] for m in indices_lower] 
-            vals_indices_upper = [ts[m] for m in indices_upper]
-
-            #assert(default_indices_upper[0] > index_est_plus) #check that index_est_plus is before middle of stimMove
-            #assert(max(indices_lower) < min(indices_upper)) #that max_group's values are all larger than all of min_group's values
-
-            lower_max = max(acface_utils.get_range(ts,indices_lower)) #max value between trigger and index_est_minus
-            upper_min = min(acface_utils.get_range(ts,indices_upper)) #min value between index_est_plus and middle of stimMov
-            if lower_max < upper_min: #check that max_group's values are all larger than all of min_group's values
-                if i < nrows*ncols: 
-                    ax.axvline(0.1,color='grey',linewidth=30,alpha=0.5) #grey bar indicates valid facial response in the trial
-                
-                #from estimated point of maximum gradient (index_est), move leftward along smoothed time series (ts_9) until values stop decreasing. This is a first estimate of facial response initiation (index_left). Then, move right from this first estimate until you find a local maximum in the 2nd derivative of the smoothed time series (ts_5_dx2). This index_left2 is the final estimate. Do the same 2 steps rightward to find response termination point. Also, make sure that final estimates don't cross index_est again.
-                index_left = acface_utils.find_closest_peakdip(ts_9,index_est,'dip','left',hillclimb=True)
-                if index_left is None: index_left = int(target_fps*.25) #assuming 250ms response time minimum
-                index_right = acface_utils.find_closest_peakdip(ts_9,index_est,'peak','right',hillclimb=True)
-                index_left2 = acface_utils.find_closest_peakdip(ts_5_dx2,index_left,'peak','right',hillclimb=False)
-                index_right2 = acface_utils.find_closest_peakdip(ts_5_dx2,index_right,'dip','left',hillclimb=False)
-                if index_left2 > index_est: index_left2 = index_left
-                if index_right2 < index_est: index_right2 = index_right
-                """
-                index_left = acface_utils.find_closest_peakdip(dx2_smoo5,index_est,'peak','left')
-                if index_left is None: index_left = int(target_fps*.25) #assuming 250ms response time minimum
-                index_right = acface_utils.find_closest_peakdip(dx2_smoo5,index_est,'dip','right')
-                index_left2 = index_left + np.argmax(ts_5_dx2[index_left:index_est])
-                index_right2 = index_est + np.argmin(ts_5_dx2[index_est:index_right])
-                """
-
-                response_start = times_trial_regular[index_left2]
-                response_midtime = times_trial_regular[index_est]
-                response_end = times_trial_regular[index_right2]
-                maximum_gradient = np.max(grad_5[index_left2:index_right2])
-                results[i,:] = [response_start,response_midtime,response_end,maximum_gradient]
-
-                if i < nrows*ncols:
-                    ax.axvline(x=times_trial_regular[index_left]+0*jitter,color='green') #initial estimate of response initiation
-                    ax.axvline(x=times_trial_regular[index_right]+0*jitter,color='red') #initial estimate of response termination
-                    ax.axvline(x=times_trial_regular[index_left2]+1*jitter,color='green',linestyle='dashed') #final estimate of response initiation
-                    ax.axvline(x=times_trial_regular[index_right2]+1*jitter,color='red',linestyle='dashed') #final estimate of response termination
-
-    if i < nrows*ncols: fig.tight_layout()
-
-    plt.show()
-
-    assert(acface_utils.pca_comp0_direction_correct(target_fps,aus_trial_mean[emot],pca[emot]))
+    get_latency = lambda values: acface_utils.get_latency(values,target_fps,n_trialsperemotion,times_trial_regular,plot=False)
+    r_an_pca0 = get_latency(aus_trial_pca['an'][:,:,0])
+    r_ha_pca0 = get_latency(aus_trial_pca['ha'][:,:,0])
+    r_ha_AU12 = get_latency(aus_trial_pca['ha'][:,:,ha_AU_index])
+    #acface_utils.plot_this_au_trial(r_an_pca0,'sub sz 0 - an - comp0',times_trial_regular,relevant_timestamps,relevant_labels,midpoint_timestamps,plot_relevant_timestamps=False,results=results)
+    
+    #OUTCOME 2 and 5
+    r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(r_an_pca0,n_trialsperemotion)
+    r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(r_ha_pca0,n_trialsperemotion)
+    r_validperc,r_latencies,r_durations,r_maxgrads=acface_utilsextract_subject_result(r_ha_AU12,n_trialsperemotion) 
 
     """Plotting"""
 
