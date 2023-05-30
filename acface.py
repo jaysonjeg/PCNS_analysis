@@ -145,7 +145,7 @@ for subject in SZ[0:1]:
     #OUTCOME 2 and 5
     r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(r_an_pca0,n_trialsperemotion)
     r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(r_ha_pca0,n_trialsperemotion)
-    r_validperc,r_latencies,r_durations,r_maxgrads=acface_utilsextract_subject_result(r_ha_AU12,n_trialsperemotion) 
+    r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(r_ha_AU12,n_trialsperemotion) 
 
     """Plotting"""
 

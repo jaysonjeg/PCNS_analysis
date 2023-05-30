@@ -1,20 +1,24 @@
 """
-Analyse movieDI data (after aopenface.py)
+Analyse movieDI face data (after OpenFace .csv files have been generated)
+Mainly using the detailed.csv log file, and the OpenFace-processed .csv file with action unit time series
+Resample action unit series from being indexed by frames as in the OpenFace .csv, to be indexed by time (sec) relative to the movie
 """
 
 import numpy as np, pandas as pd
 import matplotlib.pyplot as plt
 from glob import glob
 import re
+from acommon import *
 
+static_or_dynamic = 'static' #whether au_static was used in OpenFace execution or not
+min_success = 0.95 #minimum proportion of successful frames for a subject to be included
 
 taskname='movieDI_*_Ta_F_Ricky*'
 task_dict={'movieDI_*_Ta_F_Ricky*':'movieDI'} #mapping from 'taskname' to the label in OpenFace output file
-top_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw\\"
 
 #Search relevant subject names in Data_raw/..beh..
-files_with_task=glob(f"{top_folder}\\PCNS_*_BL\\beh\\{taskname}\\")
-files_with_task_and_video=glob(f"{top_folder}\\PCNS_*_BL\\beh\\{taskname}\\*.avi")
+files_with_task=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{taskname}\\")
+files_with_task_and_video=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{taskname}\\*.avi")
 assert(len(files_with_task)==len(files_with_task_and_video))
 subjects=[re.search('PCNS_(.*)_BL',file).groups()[0] for file in files_with_task] #gets all subject names who have data for the given task
 subjects_to_exclude=['004','005','008'] #exclude these subjects
@@ -24,8 +28,8 @@ subjects_to_exclude=['004','005','008'] #exclude these subjects
 subjects_with_task = [subject for subject in subjects if subject not in subjects_to_exclude] 
 
 #Search relevant subject names in 'intermediates/../movieDI/OpenFace
-files_with_FaceCSV=glob(f'D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates\\*\\{task_dict[taskname]}\\OpenFace\\*.csv')
-subjects=[re.search(f'intermediates\\\\(.*)\\\\{task_dict[taskname]}\\\\OpenFace',file).groups()[0] for file in files_with_FaceCSV]
+files_with_FaceCSV=glob(f'D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates\\openface_{task_dict[taskname]}\\*\\OpenFace_{static_or_dynamic}\\*.csv')
+subjects=[re.search(f'intermediates\\\openface_{task_dict[taskname]}\\\\(.*)\\\\OpenFace_{static_or_dynamic}',file).groups()[0] for file in files_with_FaceCSV]
 subjects_with_FaceCSV = [subject for subject in subjects if subject not in subjects_to_exclude] 
 
 subjects_with_FaceCSV=subjects_with_FaceCSV[0:5]
@@ -40,7 +44,7 @@ AU12_interp_allsubs=[]
 for subject in subjects_with_FaceCSV:
     print(subject)
 
-    data_path=glob(f"{top_folder}\\PCNS_{subject}_BL\\beh\\{taskname}\\*detailed.csv")[0]
+    data_path=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\{taskname}\\*detailed.csv")[0]
     face_path=glob(f'D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates\\{subject}\\{task_dict[taskname]}\\OpenFace\\*.csv')[0]
 
     """
