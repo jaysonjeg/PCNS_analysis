@@ -1,5 +1,5 @@
 """
-Contains common functions and variables for Project_PCNS/Code_analysis
+Contains common variables for Project_PCNS/Code_analysis
 
 REDCAP variable names
 pilotorreal: 1 pilot,2 real (covers all REDCAP entries)
@@ -24,8 +24,11 @@ import numpy as np, pandas as pd
 from datetime import datetime
 
 ### SETTABLE PARAMETERS ###
+"""
+Set 'data_folder', 'intermediates_folder', and 'redcap_file' to correct paths
+"""
 pc='home' #'laptop', 'home'
-files_source='local' #'local' for local machine, or else 'NEWYSNG'
+files_source='local' #'local' for local machine, or else 'NEWYSNG' for shared drive
 
 if pc=='laptop' and files_source=='NEWYSNG':
     data_folder="Z:\\Shiami_DICOM\\Psychosis\\PCNS"
@@ -35,54 +38,49 @@ elif pc=='home':
         data_folder="Z:\\NEWYSNG\\Shiami_DICOM\\Psychosis\\PCNS"
     elif files_source == 'local':
         data_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw"
-redcap_folder="G:\\My Drive\\PhD\\Project_PCNS\\BackupRedcap"
-redcap_file = "PCNS_redcap_data_table_01.csv"
-IQ_cutoff = [80,150] #consider [80/85 to 120/125]
+redcap_file = "G:\\My Drive\\PhD\\Project_PCNS\\BackupRedcap\\PCNS_redcap_data_table_01.csv"
 
 ### CONSTANT VARIABLES ###
-aus_labels = ['AU01','AU02','AU04','AU05','AU06','AU07','AU09','AU10','AU12','AU14','AU15','AU17','AU20','AU23','AU25','AU26'] #not including AU45 which is blink
-aus_names = ['InnerBrowRaiser','OuterBrowRaiser','BrowLowerer','UpperLidRaiser','CheekRaiser','LidTightener','NoseWrinkler','UpperLipRaiser','LipCornerPuller','Dimpler','LipCornerDepressor','ChinRaiser','LipStretcher','LipTightener','LipParts','JawDrop']
+IQ_cutoff = [80,150] #exclude subjects outside this range. Cconsider [80/85 to 120/125]
+aus_labels = ['AU01','AU02','AU04','AU05','AU06','AU07','AU09','AU10','AU12','AU14','AU15','AU17','AU20','AU23','AU25','AU26'] #intentionally excluded AU45 which is blink
+aus_names = ['InnerBrowRaiser','OuterBrowRaiser','BrowLowerer','UpperLidRaiser','CheekRaiser','LidTightener','NoseWrinkler','UpperLipRaiser','LipCornerPuller','Dimpler','LipCornerDepressor','ChinRaiser','LipStretcher','LipTightener','LipParts','JawDrop'] 
 n_aus = len(aus_labels)
 
 ### SETUP ###
-
-t=pd.read_csv(f"{redcap_folder}\\{redcap_file}")
+t=pd.read_csv(redcap_file)
 
 subs=np.array([f'{t.record_id[i]:03}' for i in range(t.shape[0])])
-attended=((t.pilotorreal==2) & t.attended==1)
+attended=((t.pilotorreal==2) & t.attended==1) #not-pilot subject, and attended
 dates=pd.to_datetime(t.attend_date,dayfirst=True)
 future_subs = dates > datetime.today() #subjects coming in the future
-valid = t.valid_any==1 
-invalid = t.valid_any==2
-didIQ=((attended) & (~np.isnan(t.fsiq2)))
-include_IQ = ((attended) & (t.fsiq2 >= IQ_cutoff[0]) & (t.fsiq2 <= IQ_cutoff[1]))
+valid = t.valid_any==1 #only use these subjects
+invalid = t.valid_any==2 #do not use these subjects
+didIQ=((attended) & (~np.isnan(t.fsiq2))) #subjects who did IQ test
+include_IQ = ((attended) & (t.fsiq2 >= IQ_cutoff[0]) & (t.fsiq2 <= IQ_cutoff[1])) #those whose IQ was in the allowed range
 exclude_IQ = ((attended) & ((t.fsiq2 < IQ_cutoff[0]) | (t.fsiq2 > IQ_cutoff[1]))) 
 exclude_due_to_IQ = [i for i in np.where(exclude_IQ)[0] if i not in np.where(valid)[0]]
-include = ((valid) & (include_IQ))
+include = ((valid) & (include_IQ)) #only use these subjects (subset of 'valid')
 exclude = ((invalid) | (exclude_IQ))
 
 healthy=((t.pilotorreal==2) & (t.group==1))
 clinical=((t.pilotorreal==2) & (t.group==2))
 
-healthy_attended_all=((healthy) & (t.attended==1))
+healthy_attended_all=((healthy) & (t.attended==1)) #healthy subs who attended (valid and invalid)
 clinical_attended_all=((clinical) & (t.attended==1))
-healthy_didmri_all=((healthy) & (t.attended_fmri==1))
+healthy_didmri_all=((healthy) & (t.attended_fmri==1)) #healthy subs who did mri
 clinical_didmri_all=((clinical) & (t.attended_fmri==1))
 
-healthy_attended_inc = ((healthy_attended_all) & (include)) #make sure these ppl have correct files
+healthy_attended_inc = ((healthy_attended_all) & (include)) #healthy subs who attended and are 'valid'
 healthy_attended_exc = ((healthy_attended_all) & (exclude))
 clinical_attended_inc = ((clinical_attended_all) & (include))
 clinical_attended_exc = ((clinical_attended_all) & (exclude))
-
 healthy_didmri_inc =  ((healthy_didmri_all) & (include))
 clinical_didmri_inc =  ((clinical_didmri_all) & (include))
 
 healthy_future=((healthy) & future_subs)
 clinical_future = ((clinical) & future_subs)
-
 healthy_nonattended=(healthy & (t.attended!=1) & ~(future_subs))
 clinical_nonattended=(clinical & (t.attended!=1) & ~(future_subs))
-
 healthy_DidMRIPlusFuture = (healthy_didmri_inc | healthy_future)
 clinical_DidMRIPlusFuture = (clinical_didmri_inc | clinical_future)
 
@@ -91,7 +89,7 @@ sz_attended_inc = (clinical_attended_inc) & (t.dx_dsm___1==1) #schizophrenia, at
 sza_didmri_inc= (clinical_didmri_inc) & (t.dx_dsm___2==1) #schizoaffective, did mri
 sza_attended_inc= (clinical_attended_inc) & (t.dx_dsm___2==1) #schizoaffective, attended
 
-panss_labels_P = [f'panss_p{i}' for i in range(1,8)] #panss positive symptom scamri_include_alltasksle
+panss_labels_P = [f'panss_p{i}' for i in range(1,8)] #panss positive symptom 
 panss_labels_N = [f'panss_n{i}' for i in range(1,8)] #panss negative
 panss_labels_G = [f'panss_g{i}' for i in range(1,17)] #panss general psychopathology
 hamd_labels = [f'hamd_{i}' for i in range(1,18)] #hamilton depression scale
@@ -123,44 +121,3 @@ assert( attended.sum() == didIQ.sum() ) #that number of ppl with didIQ is equal 
 
 t2=pd.concat([t.record_id,attended,didIQ],axis=1) #View this. No rows should have attended==True and didIQ==False
 t3=pd.concat([t.record_id,t.attended_fmri],axis=1)[attended] #View this. Only contains subjects with attended==1. 'attended_fmri' should have value 0 or 1, no NANs
-
-
-
-### FUNCTIONS ###
-
-class clock():
-    """
-    How to use
-    c=acommon.clock()
-    print(c.time())
-    """
-    def __init__(self):
-        self.start_time=datetime.now()       
-    def time(self):
-        end_time=datetime.now()
-        runtime=end_time-self.start_time
-        runtime_sec = runtime.total_seconds()
-        return runtime_sec,'{:.1f} sec.'.format(runtime_sec)
-
-def get_redcap(redcap_file = "CogEmotPsych_DATA_2022-10-20_1804.csv"):  
-    """
-    return redcap table
-    """
-
-    redcap_folder = "C:\\Users\\c3343721\\Google Drive\\PhD\\Project_PCNS\\BackupRedcap"
-    redcap_folder="C:\\Users\\Jayson\\Google Drive\\PhD\\Project_PCNS\\BackupRedcap"
-    
-    t=pd.read_csv(f"{redcap_folder}\\{redcap_file}")
-
-    #data.query('pilotorreal==2 & group==2') #another way to get particular data
-
-    healthy=((t.group==1) & (t.pilotorreal==2))
-    clinical=((t.group==2) & (t.pilotorreal==2))
-
-    healthy_attended=((healthy) & (t.attended==1))
-    clinical_attended=((clinical) & (t.attended==1))
-
-    healthy_didmri=((healthy) & (t.attended_fmri==1))
-    clinical_didmri=((clinical) & (t.attended_fmri==1))
-    
-    return t

@@ -19,12 +19,12 @@ Issues:
 
 """
 
-import numpy as np, pandas as pd
+import numpy as np, pandas as pd, matplotlib.pyplot as plt
+import autils, acface_utils
 from glob import glob
-import matplotlib.pyplot as plt
 from acommon import *
-import acface_utils
 from scipy.interpolate import interp1d
+
 
 target_fps=20
 ntrials=80
@@ -37,6 +37,7 @@ min_success = 0.95 #minimum proportion of successful frames for a subject to be 
 ha_AU='AU12'
 ha_AU_index = aus_labels.index(ha_AU)
 
+
 HC=((healthy_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #healthy group
 PT=((clinical_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #patient group
 SZ = ((sz_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #schizophrenia subgroup
@@ -44,31 +45,13 @@ SZA = ((sza_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #schizoaffe
 HC,PT,SZ,SZA = subs[HC],subs[PT],subs[SZ],subs[SZA]
 
 for subject in SZ[0:1]:
-    """Get the OpenFace intermediates .csv for this subject"""
-    contents = glob(f"{intermediates_folder}\\per_subject\\{subject}\\cface1\\")
-    assert(len(contents)==1)
-    resultsFolder=contents[0]
-    face = pd.read_csv(glob(f"{resultsFolder}\\OpenFace_{static_or_dynamic}\\*_cam_20fps.csv")[0])
-    all_frames=np.asarray(face['frame'])
-    success=np.array(face[' success'])
-    assert(np.sum(success)/len(success) > min_success) #check that most webcam frames are successful
-    aus_labels_r = [f' {i}_r' for i in aus_labels] #Convert action unit labels into column labels for OpenFace .csv file
-    aus_labels_c = [f' {i}_c' for i in aus_labels] 
-    aus = face[aus_labels_r] #get all action units' time series for this subject. The rows are numbered from zero, whereas actual frames are numbered from 1. The error (1/20th of a second) is negligible.
-    aus_c = face[aus_labels_c]
-    aus.columns=aus_labels #rename columns, for example from ' AU01_r' to 'AU01'
-    aus_c.columns=aus_labels #from ' AU01_c' to 'AU01'
 
-    """Get behavioural data from *out.csv"""
-    contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\cface1*Ta_*\\") #'cface' task non-MRI folder for this particular subject
-    contents = [i for i in contents if 'Ta_M' not in i]
-
-    assert(len(contents)==1) #make sure exactly one matching file
-    resultsFolder=contents[0]
-    df=pd.read_csv(glob(f"{resultsFolder}*out.csv")[0]) # make log csv into dataframe
+    all_frames,aus = autils.get_openface_table('cface1',subject,static_or_dynamic,min_success=min_success) #Get the OpenFace intermediates .csv for this subject
+    df = autils.get_beh_data('cface1',subject,'out',use_MRI_task=False) #Get behavioural data from *out.csv
 
     """Get face summary data from *face.csv"""
-    face_summary=pd.read_csv(glob(f"{resultsFolder}*face.csv")[0]) # make face summary csv into dataframe 
+    face_summary = autils.get_beh_data('cface1',subject,'face',use_MRI_task=False)
+    #face_summary=pd.read_csv(glob(f"{resultsFolder}*face.csv")[0]) # make face summary csv into dataframe 
     face_summary = {i[0]:i[1] for i in face_summary.values} #convert face summary array into dictionary
     camtstart = face_summary['camtstart'] #time when webcam started recording
     camactualfps = face_summary['camactualfps'] #actual fps of webcam recording

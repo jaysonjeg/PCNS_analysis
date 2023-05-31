@@ -1,5 +1,5 @@
 """
-Analyse movieDI face data (after OpenFace .csv files have been generated)
+Analyse movieDI face data for Ricky (after OpenFace .csv files have been generated)
 Mainly using the detailed.csv log file, and the OpenFace-processed .csv file with action unit time series
 Resample action unit series from being indexed by frames as in the OpenFace .csv, to be indexed by time (sec) relative to the movie
 """
@@ -9,16 +9,27 @@ import matplotlib.pyplot as plt
 from glob import glob
 import re
 from acommon import *
+from scipy.interpolate import interp1d
 
 static_or_dynamic = 'static' #whether au_static was used in OpenFace execution or not
-min_success = 0.95 #minimum proportion of successful frames for a subject to be included
+min_success = 0.95 #minimum proportion of successful webcam frames for a subject to be included
 
-taskname='movieDI_*_Ta_F_Ricky*'
-task_dict={'movieDI_*_Ta_F_Ricky*':'movieDI'} #mapping from 'taskname' to the label in OpenFace output file
+taskname = 'movieDI' #'cface' or 'movieDI'
+
+task_dict={'movieDI':'movieDI_*_Ta_F_Ricky*'}
+
+HC=((healthy_attended_inc) & (t.valid_movieo==1)) #healthy group
+PT=((clinical_attended_inc) & (t.valid_movieo==1)) #patient group
+SZ = ((sz_attended_inc) & (t.valid_movieo==1)) #schizophrenia subgroup
+SZA = ((sza_attended_inc) & (t.valid_movieo==1)) #schizoaffective subgroup
+HC,PT,SZ,SZA = subs[HC],subs[PT],subs[SZ],subs[SZA]
+
+subject = SZ[0] #pick a subject. Ideally we will loop over a group of subjects
+
 
 #Search relevant subject names in Data_raw/..beh..
-files_with_task=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{taskname}\\")
-files_with_task_and_video=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{taskname}\\*.avi")
+files_with_task=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{task_dict[taskname]}\\")
+files_with_task_and_video=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{task_dict[taskname]}\\*.avi")
 assert(len(files_with_task)==len(files_with_task_and_video))
 subjects=[re.search('PCNS_(.*)_BL',file).groups()[0] for file in files_with_task] #gets all subject names who have data for the given task
 subjects_to_exclude=['004','005','008'] #exclude these subjects
@@ -28,8 +39,8 @@ subjects_to_exclude=['004','005','008'] #exclude these subjects
 subjects_with_task = [subject for subject in subjects if subject not in subjects_to_exclude] 
 
 #Search relevant subject names in 'intermediates/../movieDI/OpenFace
-files_with_FaceCSV=glob(f'D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates\\openface_{task_dict[taskname]}\\*\\OpenFace_{static_or_dynamic}\\*.csv')
-subjects=[re.search(f'intermediates\\\openface_{task_dict[taskname]}\\\\(.*)\\\\OpenFace_{static_or_dynamic}',file).groups()[0] for file in files_with_FaceCSV]
+files_with_FaceCSV=glob(f'D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates\\openface_{taskname}\\*\\OpenFace_{static_or_dynamic}\\*.csv')
+subjects=[re.search(f'intermediates\\\openface_{taskname}\\\\(.*)\\\\OpenFace_{static_or_dynamic}',file).groups()[0] for file in files_with_FaceCSV]
 subjects_with_FaceCSV = [subject for subject in subjects if subject not in subjects_to_exclude] 
 
 subjects_with_FaceCSV=subjects_with_FaceCSV[0:5]

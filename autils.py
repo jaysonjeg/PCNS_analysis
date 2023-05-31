@@ -1,7 +1,9 @@
 """
-Contains functions used by different scripts for analysing PCNS project
+Contains functions used by different scripts in roject_PCNS/Code_analysis
 """
-
+import numpy as np, pandas as pd, datetime
+from glob import glob
+from acommon import *
 
 class clock():
     """
@@ -16,6 +18,23 @@ class clock():
         runtime=end_time-self.start_time
         runtime_sec = runtime.total_seconds()
         return runtime_sec,'{:.1f} sec.'.format(runtime_sec)
+
+def get_beh_data(taskname,subject,suffix,use_MRI_task):
+    """
+    Get behavioural data from *out.csv in 'beh' folder
+    suffix is 'out', 'detailed','PPG','face'. Which file to get within the subject's task folder
+    Some tasks (cface1, movieDI) have two versions: one for MRI, one for non-MRI.
+    if use_MRI_task==True, then get the MRI version, else get the non-MRI version of the task
+    """
+    contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\{taskname}*Ta_*\\") #'cface' task non-MRI folder for this particular subject
+    if use_MRI_task:
+        contents = [i for i in contents if 'Ta_M' in i]
+    else:
+        contents = [i for i in contents if 'Ta_M' not in i]
+    assert(len(contents)==1) #make sure exactly one matching file
+    resultsFolder=contents[0]
+    df=pd.read_csv(glob(f"{resultsFolder}*{suffix}.csv")[0]) # make log csv into dataframe
+    return df
 
 def get_openface_table(taskname,subject,static_or_dynamic,min_success=0.95):
     """Get the OpenFace intermediates .csv for this subject"""
