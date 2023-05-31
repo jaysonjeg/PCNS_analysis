@@ -26,20 +26,26 @@ def get_beh_data(taskname,subject,suffix,use_MRI_task):
     Some tasks (cface1, movieDI) have two versions: one for MRI, one for non-MRI.
     if use_MRI_task==True, then get the MRI version, else get the non-MRI version of the task
     """
-    contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\{taskname}*Ta_*\\") #'cface' task non-MRI folder for this particular subject
+    globstring = f"{data_folder}\\PCNS_{subject}_BL\\beh\\{taskname}*Ta_*\\"
+    contents=glob(globstring) #'cface' task non-MRI folder for this particular subject
     if use_MRI_task:
         contents = [i for i in contents if 'Ta_M' in i]
     else:
         contents = [i for i in contents if 'Ta_M' not in i]
-    assert(len(contents)==1) #make sure exactly one matching file
+    if len(contents) != 1:
+        print(f"ERROR: {len(contents)} folders found for {globstring}")
+        assert(0)
     resultsFolder=contents[0]
     df=pd.read_csv(glob(f"{resultsFolder}*{suffix}.csv")[0]) # make log csv into dataframe
     return df
 
 def get_openface_table(taskname,subject,static_or_dynamic,min_success=0.95):
     """Get the OpenFace intermediates .csv for this subject"""
-    contents = glob(f"{intermediates_folder}\\openface_{taskname}\\{subject}")
-    assert(len(contents)==1)
+    globstring = f"{intermediates_folder}\\openface_{taskname}\\{subject}"
+    contents = glob(globstring)
+    if len(contents) != 1:
+        print(f"ERROR: {len(contents)} folders found for {globstring}")
+        assert(0)
     resultsFolder=contents[0]
     face = pd.read_csv(glob(f"{resultsFolder}\\OpenFace_{static_or_dynamic}\\*_cam_20fps.csv")[0])
     all_frames=np.asarray(face['frame'])

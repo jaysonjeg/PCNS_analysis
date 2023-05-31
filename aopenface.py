@@ -8,12 +8,12 @@ import re, os, subprocess
 from acommon import *
 
 #Settable parameters
-taskname='cface1_*_Ta_*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
+taskname='movieDI_*_Ta_*_Ricky*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
 
 run_duration = np.inf #stop after this time (seconds)
 show_plot=False #show AU 12 time series per participant
 
-task_dict={'movieDI_*_Ta_F_Ricky*':'movieDI', 'cface1_*_Ta_*':'cface1'} #mapping from 'taskname' to the label in OpenFace output file
+task_dict={'movieDI_*_Ta_*_Ricky*':'movieDI', 'cface1_*_Ta_*':'cface1'} #mapping from 'taskname' to the label in OpenFace output file
 
 
 if pc=='laptop':
@@ -41,15 +41,14 @@ subjects_to_exclude=['003','004'] #exclude these subjects
 004 (is this pilot subject?) is 30fps, everyone else is 20fps. Seems to go beyond 100%...
 """
 subjects_with_task = [subject for subject in subjects if subject not in subjects_to_exclude]
-
-import acommon
-c=acommon.clock()
+import autils
+c=autils.clock()
 
 ### RUN OPENFACE TO GET .CSV FILES and put them in folder 'intermediates' ###
 for subject in subjects_with_task:
     for extract_type in ['static','dynamic']:
 
-        out_folder=f'{intermediates_folder}\\per_subject\\{subject}\\{task_dict[taskname]}\\OpenFace_{extract_type}'
+        out_folder=f'{intermediates_folder}\\openface_{task_dict[taskname]}\\{subject}\\OpenFace_{extract_type}'
         if os.path.exists(out_folder):
             print(f'{c.time()[1]}: {subject} {extract_type} ALREADY EXISTS')
         else:
