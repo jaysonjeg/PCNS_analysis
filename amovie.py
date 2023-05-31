@@ -7,7 +7,6 @@ Resample action unit series from being indexed by frames as in the OpenFace .csv
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
 from acommonvars import *
 import acommonfuncs
-from glob import glob
 from scipy.interpolate import interp1d
 
 ### SETTABLE PARAMETERS ###
@@ -30,13 +29,13 @@ SZA = ((sza_attended_inc) & (t.valid_movieo==1)) #schizoaffective subgroup
 HC,PT,SZ,SZA = subs[HC],subs[PT],subs[SZ],subs[SZA]
 
 ### DO THE ANALYSIS ###
-subject = SZ[0] #pick a subject. Ideally we would loop over a group of subjects
+subject = HC[0] #pick a subject. Ideally we would loop over a group of subjects
 
 all_frames,aus = acommonfuncs.get_openface_table('movieDI',subject,static_or_dynamic,min_success=min_success) #Get the OpenFace output .csv for this subject
 detailed = acommonfuncs.get_beh_data('movieDI',subject,'detailed',use_MRI_task=False) #Get detailed webcam frametimes from *detailed.csv
 
 #Quality checks using the *summary.csv
-summary = acommonfuncs.get_beh_data('movieDI',subject,'summary',use_MRI_task=False) #Get summary data from *summary.csv
+summary = acommonfuncs.get_beh_data('movieDI',subject,'summary',use_MRI_task=False,header=None) #Get summary data from *summary.csv
 if summary is not None:
     summary = {i[0]:i[1] for i in summary.values} #convert face summary array into dictionary
     assert(np.abs(summary['movietimestart'] - movie_actual_start_time_sec) < 0.5) #ensure movie started close to when it should have

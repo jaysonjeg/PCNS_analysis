@@ -19,12 +19,13 @@ class clock():
         runtime_sec = runtime.total_seconds()
         return runtime_sec,'{:.1f} sec.'.format(runtime_sec)
 
-def get_beh_data(taskname,subject,suffix,use_MRI_task):
+def get_beh_data(taskname,subject,suffix,use_MRI_task,header='infer'):
     """
     Get behavioural data from *out.csv in 'beh' folder
     suffix is 'out', 'detailed','PPG','face'. Which file to get within the subject's task folder
     Some tasks (cface1, movieDI) have two versions: one for MRI, one for non-MRI.
     if use_MRI_task==True, then get the MRI version, else get the non-MRI version of the task
+    header should be set to None if first row of .csv is not column names
     """
     globstring = f"{data_folder}\\PCNS_{subject}_BL\\beh\\{taskname}*Ta_*\\"
     contents=glob(globstring) #'cface' task non-MRI folder for this particular subject
@@ -33,16 +34,16 @@ def get_beh_data(taskname,subject,suffix,use_MRI_task):
     else:
         contents = [i for i in contents if 'Ta_M' not in i]
     if len(contents) != 1:
-        print(f"ERROR: {len(contents)} folders found for {globstring}")
+        print(f"ERROR: {len(contents)} folders found for {globstring}\n")
         assert(0)
     resultsFolder=contents[0]
     globstring = f"{resultsFolder}*{suffix}.csv"
     contents = glob(globstring)
     if len(contents)==1:
-        df=pd.read_csv(contents[0]) # make log csv into dataframe
+        df=pd.read_csv(contents[0],header=header) # make log csv into dataframe
         return df
     if len(contents) != 1:
-        print(f"ERROR: {len(contents)} files found for {globstring}")
+        print(f"ERROR: {len(contents)} files found for {globstring}\n")
         return None
 
 def get_openface_table(taskname,subject,static_or_dynamic,min_success=0.95):

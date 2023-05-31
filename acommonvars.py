@@ -25,11 +25,12 @@ from datetime import datetime
 
 ### SETTABLE PARAMETERS ###
 """
-Set 'data_folder', 'intermediates_folder', and 'redcap_file' to correct paths
+Sets 'data_folder', 'intermediates_folder', and 'redcap_file' to correct paths
 """
+
+'''
 pc='home' #'laptop', 'home'
 files_source='local' #'local' for local machine, or else 'NEWYSNG' for shared drive
-
 if pc=='laptop' and files_source=='NEWYSNG':
     data_folder="Z:\\Shiami_DICOM\\Psychosis\\PCNS"
 elif pc=='home':
@@ -39,6 +40,10 @@ elif pc=='home':
     elif files_source == 'local':
         data_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw"
 redcap_file = "G:\\My Drive\\PhD\\Project_PCNS\\BackupRedcap\\PCNS_redcap_data_table_01.csv"
+'''
+data_folder="G:\\My Drive\\Share_Angelica\\Data_raw\\per_subject"
+intermediates_folder="G:\\My Drive\\Share_Angelica\\intermediates"
+redcap_file = "G:\\My Drive\\Share_Angelica\\PCNS_redcap_data_table_01.csv"
 
 ### CONSTANT VARIABLES ###
 IQ_cutoff = [80,150] #exclude subjects outside this range. Default [80,150]. Consider [80/85 to 120/125]
