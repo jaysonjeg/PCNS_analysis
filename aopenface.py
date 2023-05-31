@@ -5,7 +5,7 @@ Code using OpenFace on facial videos from PCNS study (movieDI and cface) to prod
 import matplotlib.pyplot as plt, numpy as np, pandas as pd
 from glob import glob
 import re, os, subprocess
-from acommon import *
+from acommonvars import *
 
 #Settable parameters
 taskname='movieDI_*_Ta_*_Ricky*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
@@ -41,8 +41,8 @@ subjects_to_exclude=['003','004'] #exclude these subjects
 004 (is this pilot subject?) is 30fps, everyone else is 20fps. Seems to go beyond 100%...
 """
 subjects_with_task = [subject for subject in subjects if subject not in subjects_to_exclude]
-import autils
-c=autils.clock()
+import acommonfuncs
+c=acommonfuncs.clock()
 
 ### RUN OPENFACE TO GET .CSV FILES and put them in folder 'intermediates' ###
 for subject in subjects_with_task:

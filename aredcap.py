@@ -1,10 +1,10 @@
 """
-Print out summary from redcap export .csv file, and plot figures of demographic variables
+Print out summary from redcap export .csv file, do quality control, plot figures of demographic variables
 """
 
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
 import aredcap_utils
-from acommon import *
+from acommonvars import *
 
 ### SETTABLE PARAMETERS ###
 check_files=True #to check whether files match REDCAP 'valid' entries
@@ -12,6 +12,31 @@ check_numb_mri=True #to check number of files within each MRI folder (slow)
 check_numb_beh=True
 summary_printout=False 
 plot_demographics=False
+
+### Get some more variables ###
+healthy_future=((healthy) & future_subs)
+clinical_future = ((clinical) & future_subs)
+healthy_nonattended=(healthy & (t.attended!=1) & ~(future_subs))
+clinical_nonattended=(clinical & (t.attended!=1) & ~(future_subs))
+healthy_DidMRIPlusFuture = (healthy_didmri_inc | healthy_future)
+clinical_DidMRIPlusFuture = (clinical_didmri_inc | clinical_future)
+
+### Quality control ###
+print(f'Excluded {healthy_attended_exc.sum()} healthy and {clinical_attended_exc.sum()} clinical participants')
+didmri = t.attended_fmri==1
+didmri_and_future = ((didmri) & (future_subs))
+assert(didmri_and_future.sum() == 0) #make sure everyone is either in the past or the future
+assert(not(np.isnan(t.pilotorreal).any())) #make sure everyone has a value for pilotorreal
+assert(not(np.isnan(t.group).any())) #make sure everyone has a value for group
+assert(clinical_attended_all.sum()== (((t.dx_dsm___1)|(t.dx_dsm___2)|(t.dx_dsm___3)|(t.dx_dsm___4)|(t.dx_dsm___5)|(t.dx_dsm___6))).sum()) #make sure number of people with any diagnosis is equal to number of clinical pts who attended
+temp =(attended) & ( np.isnan(didIQ) | np.isnan(t.valid_any) )
+assert(temp.sum()==0) #make sure that all attended people have the required variables
+assert( attended.sum() == (~np.isnan(t.valid_any)).sum()) #that number of non-nan values in valid_any is equal to number of all attended people
+assert( attended.sum() == didIQ.sum() ) #that number of ppl with didIQ is equal to number of all attended people
+t2=pd.concat([t.record_id,attended,didIQ],axis=1) #Check that no rows should have attended==True and didIQ==False
+assert(len(np.where(t2[0] & ~t2[1])[0])==0)
+t3=pd.concat([t.record_id,t.attended_fmri],axis=1)[attended] #t3 only contains subjects with attended==1. Check that 'attended_fmri' should have value 0 or 1, no NANs (ie only 2 unique values)
+assert(len(np.unique(t3.attended_fmri))==2)
 
 ### Check behavioural and MRI files ###
 

@@ -6,7 +6,7 @@ Kind of copied from Analysis_proprio.m
 import numpy as np, pandas as pd
 import matplotlib.pyplot as plt
 from glob import glob
-import re, scipy.io, acommon
+import re, scipy.io, acommonvars
 
 AU_to_plot = 'AU12'
 top_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw\\"
@@ -18,7 +18,7 @@ subjects_to_exclude=['018'] #exclude these subjects, e.g. ['020']
 """
 subjects_with_task = [subject for subject in subjects if subject not in subjects_to_exclude]
 
-t=acommon.get_redcap()
+t=acommonvars.get_redcap()
 group_numbers = [t.group[t.record_id==int(subject)].iloc[0] for subject in subjects]
 group = [{1:'healthy',2:'clinical'}[i] for i in group_numbers]
 

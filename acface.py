@@ -20,12 +20,12 @@ Issues:
 """
 
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
-import autils, acface_utils
+import acommonfuncs, acface_utils
 from glob import glob
-from acommon import *
+from acommonvars import *
 from scipy.interpolate import interp1d
 
-
+### SETTABLE PARAMETERS ###
 target_fps=20
 ntrials=80
 n_trialsperemotion=40
@@ -44,13 +44,15 @@ SZ = ((sz_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #schizophreni
 SZA = ((sza_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #schizoaffective subgroup
 HC,PT,SZ,SZA = subs[HC],subs[PT],subs[SZ],subs[SZA]
 
+### DO THE ANALYSIS ###
+
 for subject in SZ[0:1]:
 
-    all_frames,aus = autils.get_openface_table('cface1',subject,static_or_dynamic,min_success=min_success) #Get the OpenFace intermediates .csv for this subject
-    df = autils.get_beh_data('cface1',subject,'out',use_MRI_task=False) #Get behavioural data from *out.csv
+    all_frames,aus = acommonfuncs.get_openface_table('cface1',subject,static_or_dynamic,min_success=min_success) #Get the OpenFace intermediates .csv for this subject
+    df = acommonfuncs.get_beh_data('cface1',subject,'out',use_MRI_task=False) #Get behavioural data from *out.csv
 
     """Get face summary data from *face.csv"""
-    face_summary = autils.get_beh_data('cface1',subject,'face',use_MRI_task=False)
+    face_summary = acommonfuncs.get_beh_data('cface1',subject,'face',use_MRI_task=False)
     #face_summary=pd.read_csv(glob(f"{resultsFolder}*face.csv")[0]) # make face summary csv into dataframe 
     face_summary = {i[0]:i[1] for i in face_summary.values} #convert face summary array into dictionary
     camtstart = face_summary['camtstart'] #time when webcam started recording

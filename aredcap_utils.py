@@ -1,6 +1,6 @@
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
 import os, re
-from acommon import *
+from acommonvars import *
 
     
 def get(pattern,list_of_strings):

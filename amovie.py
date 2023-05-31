@@ -4,14 +4,24 @@ Mainly using the detailed.csv log file, and the OpenFace-processed .csv file wit
 Resample action unit series from being indexed by frames as in the OpenFace .csv, to be indexed by time (sec) relative to the movie
 """
 
-import numpy as np, pandas as pd, re, matplotlib.pyplot as plt
-from acommon import *
-import autils
+import numpy as np, pandas as pd, matplotlib.pyplot as plt
+from acommonvars import *
+import acommonfuncs
 from glob import glob
 from scipy.interpolate import interp1d
 
-static_or_dynamic = 'static' #whether au_static was used in OpenFace execution or not
-min_success = 0.95 #minimum proportion of successful webcam frames for a subject to be included
+### SETTABLE PARAMETERS ###
+
+static_or_dynamic = 'static' #whether au_static flag was used in OpenFace execution or not (default 'static', alternatively 'dynamic')
+min_success = 0.95 #minimum proportion of successful webcam frames for a subject to be included. Default 0.95
+target_fps=20 #target framerate to resample time series to
+
+movie_actual_start_time_sec = 2 #2sec for non MRI version, 10 sec for MRI version
+movie_actual_duration_sec = 253 #253sec for Ricky stimulus, ??? for DISFA stimulus
+
+gap_sec = 0 #use webcam outputs from this many seconds after movie starts, until this many seconds before movie ends. Default 0. Could set to 0.5 to avoid the first 0.5sec of the movie, and the last 0.5sec of the movie
+start_time_sec = 2 + gap_sec #actual start time used for analysis
+duration_sec = movie_actual_duration_sec - gap_sec
 
 HC=((healthy_attended_inc) & (t.valid_movieo==1)) #healthy group
 PT=((clinical_attended_inc) & (t.valid_movieo==1)) #patient group
@@ -19,79 +29,41 @@ SZ = ((sz_attended_inc) & (t.valid_movieo==1)) #schizophrenia subgroup
 SZA = ((sza_attended_inc) & (t.valid_movieo==1)) #schizoaffective subgroup
 HC,PT,SZ,SZA = subs[HC],subs[PT],subs[SZ],subs[SZA]
 
-subject = SZ[0] #pick a subject. Ideally we will loop over a group of subjects
+### DO THE ANALYSIS ###
+subject = SZ[0] #pick a subject. Ideally we would loop over a group of subjects
 
+all_frames,aus = acommonfuncs.get_openface_table('movieDI',subject,static_or_dynamic,min_success=min_success) #Get the OpenFace output .csv for this subject
+detailed = acommonfuncs.get_beh_data('movieDI',subject,'detailed',use_MRI_task=False) #Get detailed webcam frametimes from *detailed.csv
 
-all_frames,face2 = autils.get_openface_table('movieDI',subject,static_or_dynamic,min_success=min_success) #Get the OpenFace intermediates .csv for this subject
-data2 = autils.get_beh_data('movieDI',subject,'detailed',use_MRI_task=False) #Get behavioural data from *out.csv
+#Quality checks using the *summary.csv
+summary = acommonfuncs.get_beh_data('movieDI',subject,'summary',use_MRI_task=False) #Get summary data from *summary.csv
+if summary is not None:
+    summary = {i[0]:i[1] for i in summary.values} #convert face summary array into dictionary
+    assert(np.abs(summary['movietimestart'] - movie_actual_start_time_sec) < 0.5) #ensure movie started close to when it should have
+    assert(np.abs(summary['actualmovietime'] - movie_actual_duration_sec) < 0.5)
 
-'''
-#Search relevant subject names in Data_raw/..beh..
-files_with_task=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{task_dict[taskname]}\\")
-files_with_task_and_video=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{task_dict[taskname]}\\*.avi")
-assert(len(files_with_task)==len(files_with_task_and_video))
-subjects=[re.search('PCNS_(.*)_BL',file).groups()[0] for file in files_with_task] #gets all subject names who have data for the given task
-subjects_to_exclude=['004','005','008'] #exclude these subjects
-"""
-004 (is this pilot subject?) is 30fps, everyone else is 20fps
-"""
-subjects_with_task = [subject for subject in subjects if subject not in subjects_to_exclude] 
-
-#Search relevant subject names in 'intermediates/../movieDI/OpenFace
-files_with_FaceCSV=glob(f'D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates\\openface_{taskname}\\*\\OpenFace_{static_or_dynamic}\\*.csv')
-subjects=[re.search(f'intermediates\\\openface_{taskname}\\\\(.*)\\\\OpenFace_{static_or_dynamic}',file).groups()[0] for file in files_with_FaceCSV]
-subjects_with_FaceCSV = [subject for subject in subjects if subject not in subjects_to_exclude] 
-
-subjects_with_FaceCSV=subjects_with_FaceCSV[0:5]
-
-#should check that subjects_with_FaceCSV is equal or subset of subjects_with_task
-'''
-
-
-print(subject)
-taskname = 'movieDI' #'cface' or 'movieDI'
-task_dict={'movieDI':'movieDI_*_Ta_*_Ricky*'}
-data_path=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\{task_dict[taskname]}\\*detailed.csv")[0]
-face_path=glob(f'D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates\\openface_{taskname}\\{subject}\\OpenFace_{static_or_dynamic}\\*.csv')[0]
-data=pd.read_csv(data_path) #contains ptframenum, fliptime
-face=pd.read_csv(face_path) #contains OpenFace outputs
-
-
-#Get estimate of actual time for each row of OpenFace output csv
-face['oldtime']=np.nan
-for index,row in face.iterrows(): #for each row of OpenFace output (corresponding to webcam frames)
-    #framenum=row['frame'] 
-    framenum = index + 1 #same as row['frame']
+#Use *detailed.csv to get estimated timestamp for each webcam frame
+times_eachframe = np.zeros(len(all_frames),dtype=float) #holds the estimated timestamp for each webcam frame
+times_eachframe[:]=np.nan
+for index in range(aus.shape[0]): #for each row of OpenFace output .csv (corresponding to webcam frames)
+    framenum = index + 1 
     try: #if that webcam frame coincides with any movie frames (appears in data.ptframenums)
-        fliptime=data.fliptimes[data.ptframenums==framenum].iloc[0] #find the first movie fliptime which corresponds to that webcam frame
-        #Put this fliptime into the 'face' dataframe
-        face.at[index,'oldtime']=fliptime
+        times_eachframe[index]=detailed.fliptimes[detailed.ptframenums==framenum].iloc[0] #find the timestamp of the first loop iteration which corresponds to that webcam frame
     except:
         pass
 
-nonNANinds=~np.isnan(face.oldtime)
-successes=face[' success'][nonNANinds] 
-successRate = 100 * successes.sum() / len(successes) #   percent of frames where OpenFace detected a face (within frames that were during the movie, as opposed to before or after)
+#Resample action unit time series at 20fps with linear interpolation
+interp_aus=interp1d(times_eachframe,aus,kind='linear',axis=0,fill_value='extrapolate') 
+times_regular = np.arange(start_time_sec,duration_sec,1/target_fps)
+aust=interp_aus(times_regular)
+aust=pd.DataFrame(aust)
+aust.columns = aus.columns #use aust for any downstream analyses
 
-oldtime=np.asarray(face['oldtime'][nonNANinds])
-AU12=np.asarray(face[' AU12_r'][nonNANinds])
-
-
-#Interpolation to new timestamps separated by 0.05s
-from scipy.interpolate import interp1d
-time_interp=np.arange(np.ceil(min(data.fliptimes)),np.floor(max(data.fliptimes)),0.2)
-func=interp1d(oldtime,AU12)
-AU12_interp=func(time_interp)
-
-
-
-#Plot AU12 time series, each participant at a time
+#Plot AU12 time series, for a single participant
 fig,ax=plt.subplots()
-ax.plot(oldtime,AU12,label='raw')
-ax.plot(time_interp,AU12_interp,label='interpolated')
+ax.plot(times_regular,aust['AU12'],color='blue',label='x')
 ax.set_ylim(bottom=0)
 ax.set_xlim(left=0)
 ax.set_xlabel('Time (s)')
-ax.set_title(f"Sub {subject} success {successRate:.1f}%")
 ax.legend()
 plt.show()

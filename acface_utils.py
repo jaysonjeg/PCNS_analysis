@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 from scipy.interpolate import interp1d
 from sklearn.decomposition import PCA
 import warnings
-import acommon
+import acommonvars
 
 def plot_this_au(df,ax,times,aust,this_AU='AU12',color='green',label=None):
     #Plot AU12 time series with annotations. Blue lines are happy trigger. Red lines are angry trigger
@@ -178,7 +178,7 @@ def find_vals_between(start_frames,end_frames,aus):
 
 def get_pca(list_of_arrays):
     array = np.vstack(list_of_arrays)
-    pca=PCA(n_components = acommon.n_aus)
+    pca=PCA(n_components = acommonvars.n_aus)
     pca.fit(array)
     return pca
 

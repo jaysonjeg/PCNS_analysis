@@ -5,7 +5,7 @@ import numpy as np, pandas as pd
 import matplotlib.pyplot as plt
 from glob import glob
 import re
-from acommon import *
+from acommonvars import *
 from scipy import stats
 
 def get_data_table(subject):
