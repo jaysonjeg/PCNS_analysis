@@ -27,7 +27,7 @@ def get_beh_data(taskname,subject,suffix,use_MRI_task,header='infer'):
     if use_MRI_task==True, then get the MRI version, else get the non-MRI version of the task
     header should be set to None if first row of .csv is not column names
     """
-    globstring = f"{data_folder}\\PCNS_{subject}_BL\\beh\\{taskname}*Ta_*\\"
+    globstring = f"{data_folder}\\PCNS_{subject}_BL\\beh\\{taskname}*Ta_*"
     contents=glob(globstring) #'cface' task non-MRI folder for this particular subject
     if use_MRI_task:
         contents = [i for i in contents if 'Ta_M' in i]
@@ -37,7 +37,7 @@ def get_beh_data(taskname,subject,suffix,use_MRI_task,header='infer'):
         print(f"ERROR: {len(contents)} folders found for {globstring}\n")
         assert(0)
     resultsFolder=contents[0]
-    globstring = f"{resultsFolder}*{suffix}.csv"
+    globstring = f"{resultsFolder}\\*{suffix}.csv"
     contents = glob(globstring)
     if len(contents)==1:
         df=pd.read_csv(contents[0],header=header) # make log csv into dataframe
@@ -46,7 +46,7 @@ def get_beh_data(taskname,subject,suffix,use_MRI_task,header='infer'):
         print(f"ERROR: {len(contents)} files found for {globstring}\n")
         return None
 
-def get_openface_table(taskname,subject,static_or_dynamic,min_success=0.95):
+def get_openface_table(taskname,subject,static_or_dynamic):
     """Get the OpenFace intermediates .csv for this subject"""
     globstring = f"{intermediates_folder}\\openface_{taskname}\\{subject}"
     contents = glob(globstring)
@@ -57,14 +57,13 @@ def get_openface_table(taskname,subject,static_or_dynamic,min_success=0.95):
     face = pd.read_csv(glob(f"{resultsFolder}\\OpenFace_{static_or_dynamic}\\*_cam_20fps.csv")[0])
     all_frames=np.asarray(face['frame'])
     success=np.array(face[' success'])
-    assert(np.sum(success)/len(success) > min_success) #check that most webcam frames are successful
     aus_labels_r = [f' {i}_r' for i in aus_labels] #Convert action unit labels into column labels for OpenFace .csv file
     aus_labels_c = [f' {i}_c' for i in aus_labels] 
     aus = face[aus_labels_r] #get all action units' time series for this subject. The rows are numbered from zero, whereas actual frames are numbered from 1. The error (1/20th of a second) is negligible.
     aus_c = face[aus_labels_c]
     aus.columns=aus_labels #rename columns, for example from ' AU01_r' to 'AU01'
     aus_c.columns=aus_labels #from ' AU01_c' to 'AU01'
-    return all_frames,aus
+    return all_frames,aus, success
 '''
 def get_redcap(redcap_file = "CogEmotPsych_DATA_2022-10-20_1804.csv"):  
     """

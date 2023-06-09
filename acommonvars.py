@@ -28,7 +28,7 @@ from datetime import datetime
 Sets 'data_folder', 'intermediates_folder', and 'redcap_file' to correct paths
 """
 
-'''
+
 pc='home' #'laptop', 'home'
 files_source='local' #'local' for local machine, or else 'NEWYSNG' for shared drive
 if pc=='laptop' and files_source=='NEWYSNG':
@@ -44,7 +44,7 @@ redcap_file = "G:\\My Drive\\PhD\\Project_PCNS\\BackupRedcap\\PCNS_redcap_data_t
 data_folder="G:\\My Drive\\Share_Angelica\\Data_raw\\per_subject"
 intermediates_folder="G:\\My Drive\\Share_Angelica\\intermediates"
 redcap_file = "G:\\My Drive\\Share_Angelica\\PCNS_redcap_data_table_01.csv"
-
+'''
 ### CONSTANT VARIABLES ###
 IQ_cutoff = [80,150] #exclude subjects outside this range. Default [80,150]. Consider [80/85 to 120/125]
 aus_labels = ['AU01','AU02','AU04','AU05','AU06','AU07','AU09','AU10','AU12','AU14','AU15','AU17','AU20','AU23','AU25','AU26'] #intentionally excluded AU45 which is blink

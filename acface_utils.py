@@ -94,6 +94,18 @@ def plot_this_au_trial_superimposed(emot,index,title,aus_trial,aus_trial_mean,au
     fig.tight_layout()
 
 
+def plot_pca_mapping(pca, aus_pca,aus_names):
+    # Plot how PCA components map onto action units
+    fig, ax = plt.subplots()
+    im = ax.imshow(pca['ha'].components_.T)
+    cbar = ax.figure.colorbar(im, ax=ax)
+    ax.set_xlabel('AU')
+    ax.set_yticks(np.arange(len(aus_names)))
+    ax.set_yticklabels(aus_names)
+    ax.set_xticks(np.arange(len(aus_pca['ha'].columns)))
+    ax.set_xlabel('Component')
+    ax.set_xticklabels([i[-1] for i in aus_pca['ha'].columns])
+
 def find_duplicate_indices(lst):
     #In list lst, for each item that appears more than once, return the indices of all its appearances after the first appearance
     seen = set()

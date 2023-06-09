@@ -8,7 +8,7 @@ import re, os, subprocess
 from acommonvars import *
 
 #Settable parameters
-taskname='movieDI_*_Ta_*_Ricky*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
+taskname='cface1_*_Ta_*' #'movieDI_*_Ta_F_Ricky*'   ,   'cface1_*_Ta_H*'
 
 run_duration = np.inf #stop after this time (seconds)
 show_plot=False #show AU 12 time series per participant
@@ -28,7 +28,7 @@ print(files_with_task[0:2])
 assert(0)
 """
 
-files_with_task=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{taskname}\\")
+files_with_task=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{taskname}")
 files_with_task_and_video=glob(f"{data_folder}\\PCNS_*_BL\\beh\\{taskname}\\*.avi")
 files_with_task = [i for i in files_with_task if 'Ta_M' not in i]
 files_with_task_and_video = [i for i in files_with_task_and_video if 'Ta_M' not in i]
