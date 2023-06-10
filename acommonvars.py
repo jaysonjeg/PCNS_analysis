@@ -80,7 +80,6 @@ clinical_attended_inc = ((clinical_attended_all) & (include))
 clinical_attended_exc = ((clinical_attended_all) & (exclude))
 healthy_didmri_inc =  ((healthy_didmri_all) & (include))
 clinical_didmri_inc =  ((clinical_didmri_all) & (include))
-
 sz_didmri_inc = (clinical_didmri_inc) & (t.dx_dsm___1==1) #schizophrenia, did mri
 sz_attended_inc = (clinical_attended_inc) & (t.dx_dsm___1==1) #schizophrenia, attended
 sza_didmri_inc= (clinical_didmri_inc) & (t.dx_dsm___2==1) #schizoaffective, did mri

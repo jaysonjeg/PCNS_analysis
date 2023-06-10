@@ -45,20 +45,22 @@ get_latencies=False
 get_maxgrads=False
 to_plot=False
 
+t['use_cface'] = ((include) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #those subjects whose cface data we will use
+
 HC=((healthy_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #healthy group
 PT=((clinical_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #patient group
 SZ = ((sz_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #schizophrenia subgroup
 SZA = ((sza_didmri_inc) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #schizoaffective subgroup
 HC,PT,SZ,SZA = subs[HC],subs[PT],subs[SZ],subs[SZA]
 
-def get_metrics(subject):
+def get_outcomes(subject):
     print(c.time()[1])
     all_frames,aus,success = acommonfuncs.get_openface_table('cface1',subject,static_or_dynamic) #Get the OpenFace intermediates .csv for this subject
 
     webcam_frames_success_proportion = np.sum(success)/len(success)
     if webcam_frames_success_proportion < min_success:
         print(f"WARNING: {subject} has only {webcam_frames_success_proportion:.3f} proportion of successful frames. Returning nan.")
-        return np.nan
+        return {'amp_max':np.nan, 'amp_range':np.nan}
 
     df = acommonfuncs.get_beh_data('cface1',subject,'out',use_MRI_task=False) #Get behavioural data from *out.csv
 
@@ -185,23 +187,66 @@ def get_metrics(subject):
         #acface_utils.plot_pca_mapping(pca, aus_pca,aus_names)
         plt.show()
 
-    return ha_AU_trial_ha_max
+    return {'amp_max':ha_AU_trial_ha_max, 'amp_range':ha_AU_trial_ha_range}
+    #return ha_AU_trial_ha_max, ha_AU_trial_ha_range
 
-r_HC = [get_metrics(sub) for sub in HC[:]]
-r_SZ = [get_metrics(sub) for sub in SZ[:]]
-r_SZA = [get_metrics(sub) for sub in SZA[:]]
+r_HC = [get_outcomes(sub) for sub in HC[:]] #list (for each subject) of dictionary (indexed by outcomes)
+r_SZ = [get_outcomes(sub) for sub in SZ[:]]
+r_SZA = [get_outcomes(sub) for sub in SZA[:]]
+
+keys=list(r_HC[0].keys())
+r={}
+r['hc'] = {key:[r_HC[i][key] for i in range(len(r_HC))] for key in keys} #r['hc'] is a dictionary (index by outcomes) of list (for each subject) of values
+r['sz'] = {key:[r_SZ[i][key] for i in range(len(r_SZ))] for key in keys}
+r['sza'] = {key:[r_SZA[i][key] for i in range(len(r_SZA))] for key in keys}
+r=pd.DataFrame(r) #columns are hc,sz,sza. rows are the outcomes. Acess using for example r.loc['sz','amp_max']
+r2 = r.T #cols are outcomes, rows are hc, sz, sza
+assert(0)
+
+
 
 r_HC_mean = [np.mean(i) for i in r_HC]
 r_SZ_mean = [np.mean(i) for i in r_SZ]
 r_SZA_mean = [np.mean(i) for i in r_SZA]
 
+def get_slope(vector):
+
+    if type(vector)!=np.ndarray and np.isnan(vector): return np.nan
+    else:
+        slope,intercept = np.polyfit(range(len(vector)),vector,1)
+        return slope
+
+r_HC_slope = [get_slope(i) for i in r_HC]
+r_SZ_slope = [get_slope(i) for i in r_SZ]
+r_SZA_slope = [get_slope(i) for i in r_SZA]
+
+fig,axs=plt.subplots(3)
+axs[0].hist(r_HC_mean,label='hc',color='blue',alpha=0.3)
+axs[0].hist(r_SZ_mean,label='sz',color='red',alpha=0.3)
+axs[0].hist(r_SZA_mean,label='sza',color='green',alpha=0.3)
+axs[0].legend()
+axs[1].hist(r_HC_slope,label='hc',color='blue',alpha=0.3)
+axs[1].hist(r_SZ_slope,label='sz',color='red',alpha=0.3)
+axs[1].hist(r_SZA_slope,label='sza',color='green',alpha=0.3)
+axs[1].legend()
+axs[2].hist(np.log10(r_HC_slope),label='hc',color='blue',alpha=0.3)
+axs[2].hist(np.log10(r_SZ_slope),label='sz',color='red',alpha=0.3)
+axs[2].hist(np.log10(r_SZA_slope),label='sza',color='green',alpha=0.3)
+axs[2].legend()
+plt.show()
+
+
 def plot_amplitudes_decreasing(results,title):
     fig,axs=plt.subplots(4,4)
     axs = axs.flatten()
     for i in range(16):
-        axs[i].scatter(range(len(results[i])),results[i])  
+        xvals = range(len(results[i]))
+        yvals=results[i]
+        #slope of yvals/xvals
+        slope,intercept = np.polyfit(xvals,yvals,1) #units are AU intensity change per trial
+        axs[i].scatter(xvals,yvals)  
         axs[i].set_xlabel('Trial')
-        axs[i].set_title(title)
-
-plot_amplitudes_decreasing(r_HC,'HC')
-plt.show()
+        axs[i].set_title(f"{title}: slope={slope:.2e}")
+    fig.tight_layout()
+#plot_amplitudes_decreasing(r_HC,'HC')
+#plt.show()
