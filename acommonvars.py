@@ -53,7 +53,8 @@ n_aus = len(aus_labels)
 
 ### SETUP ###
 t=pd.read_csv(redcap_file)
-subs=np.array([f'{t.record_id[i]:03}' for i in range(t.shape[0])])
+subs=np.array([f'{t.record_id[i]:03}' for i in range(t.shape[0])]) #make record_ids from int to string, e.g. 3 to '003', 134 to '134'
+t['subject'] = subs
 attended=((t.pilotorreal==2) & t.attended==1) #not-pilot subject, and attended
 dates=pd.to_datetime(t.attend_date,dayfirst=True)
 future_subs = dates > datetime.today() #subjects coming in the future
@@ -68,6 +69,22 @@ exclude = ((invalid) | (exclude_IQ))
 
 healthy=((t.pilotorreal==2) & (t.group==1))
 clinical=((t.pilotorreal==2) & (t.group==2))
+hc=healthy #alias
+cc=clinical
+sz = t.dx_dsm___1==1 #schizophrenia
+sza = t.dx_dsm___2==1 #schizoaffective
+
+t['group01']=''
+for i in range(len(t)):
+    if hc[i]: t.at[i,'group01']='hc'
+    if sz[i]: t.at[i,'group01']='sz'
+    if sza[i]: t.at[i,'group01']='sza'
+
+hc_color='green'
+cc_color='brown'
+sza_color='orange'
+sz_color='red'
+colors={'hc':'green','cc':'brown','sza':'orange','sz':'red'}
 
 healthy_attended_all=((healthy) & (t.attended==1)) #healthy subs who attended (valid and invalid)
 clinical_attended_all=((clinical) & (t.attended==1))

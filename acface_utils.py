@@ -132,9 +132,9 @@ def moving_average(x,window_length):
 def find_closest_peakdip(x, t,peak_or_dip,left_or_right,hillclimb=True):
     #Given time series x and index t, find index of closest peak to the right of t
     if left_or_right=='right':
-        iterator = range(t,len(x))
+        iterator = range(t,len(x)-1)
     elif left_or_right=='left':
-        iterator = range(t,0,-1)
+        iterator = range(t,1,-1)
     for n in iterator:
         if hillclimb:
             current=x[n]
@@ -248,10 +248,6 @@ def get_latency(values,target_fps,n_trialsperemotion,times_trial_regular,plot=Fa
         if p==q: return [vals[p]]
         else: return vals[p:q]
 
-    #Timepoints to compare to make sure valid facial response was detected
-    default_indices_lower = [5] #250ms after trigger (optionally add at start of nextInstruct to make sure they look normal again)
-    default_indices_upper = [int(target_fps*m) for m in [0.5+1.25+0.75]] #midway through stimMove 
-
     if plot:
 
         relevant_timejitters=[0,0.5,0.75,1.5,0.75,0.5] #(0, trigger, post_trigger, stimMove, fixation, next instruction)
@@ -307,6 +303,11 @@ def get_latency(values,target_fps,n_trialsperemotion,times_trial_regular,plot=Fa
             ax.axvline(x=times_trial_regular[index_est]+0*jitter,color='black',linestyle='dashed')
         
         if (index_est_plus <= len(ts)-1 and index_est_minus >= 0): #check that the estimated peak is not too close to start or end
+
+            #Timepoints to compare to make sure valid facial response was detected
+            default_indices_lower = [5] #250ms after trigger (optionally add at start of nextInstruct to make sure they look normal again)
+            default_indices_upper = [int(target_fps*m) for m in [0.5+1.25+0.75]] #midway through stimMove 
+
             indices_lower = default_indices_lower+[index_est_minus]
             indices_upper = default_indices_upper+[index_est_plus]
             times_lower = [times_trial_regular[m] for m in indices_lower]
@@ -333,29 +334,30 @@ def get_latency(values,target_fps,n_trialsperemotion,times_trial_regular,plot=Fa
                 index_left = find_closest_peakdip(ts_9,index_est,'dip','left',hillclimb=True)
                 if index_left is None: index_left = int(target_fps*.25) #assuming 250ms response time minimum
                 index_right = find_closest_peakdip(ts_9,index_est,'peak','right',hillclimb=True)
-                index_left2 = find_closest_peakdip(ts_5_dx2,index_left,'peak','right',hillclimb=False)
-                index_right2 = find_closest_peakdip(ts_5_dx2,index_right,'dip','left',hillclimb=False)
-                if index_left2 > index_est: index_left2 = index_left
-                if index_right2 < index_est: index_right2 = index_right
-                """
-                index_left = acface_utils.find_closest_peakdip(dx2_smoo5,index_est,'peak','left')
-                if index_left is None: index_left = int(target_fps*.25) #assuming 250ms response time minimum
-                index_right = acface_utils.find_closest_peakdip(dx2_smoo5,index_est,'dip','right')
-                index_left2 = index_left + np.argmax(ts_5_dx2[index_left:index_est])
-                index_right2 = index_est + np.argmin(ts_5_dx2[index_est:index_right])
-                """
+                if index_right is not None: #make sure that maximum is not the rightmost data point
+                    index_left2 = find_closest_peakdip(ts_5_dx2,index_left,'peak','right',hillclimb=False)
+                    index_right2 = find_closest_peakdip(ts_5_dx2,index_right,'dip','left',hillclimb=False)
+                    if index_left2 > index_est: index_left2 = index_left
+                    if index_right2 < index_est: index_right2 = index_right
+                    """
+                    index_left = acface_utils.find_closest_peakdip(dx2_smoo5,index_est,'peak','left')
+                    if index_left is None: index_left = int(target_fps*.25) #assuming 250ms response time minimum
+                    index_right = acface_utils.find_closest_peakdip(dx2_smoo5,index_est,'dip','right')
+                    index_left2 = index_left + np.argmax(ts_5_dx2[index_left:index_est])
+                    index_right2 = index_est + np.argmin(ts_5_dx2[index_est:index_right])
+                    """
 
-                results.indices_leftright[i] = [times_trial_regular[index_left],times_trial_regular[index_right]]
-                results.max_grad[i] = np.max(grad_5[index_left2:index_right2])
-                results.start[i] = times_trial_regular[index_left2]
-                results.end[i] = times_trial_regular[index_right2]
+                    results.indices_leftright[i] = [times_trial_regular[index_left],times_trial_regular[index_right]]
+                    results.max_grad[i] = np.max(grad_5[index_left2:index_right2]) #max (during time of 'smile' response) of gradient of smoothed time series
+                    results.start[i] = times_trial_regular[index_left2]
+                    results.end[i] = times_trial_regular[index_right2]
 
-                
-                if plot and i < nrows*ncols:
-                    ax.axvline(x=times_trial_regular[index_left]+0*jitter,color='green') #initial estimate of response initiation
-                    ax.axvline(x=times_trial_regular[index_right]+0*jitter,color='red') #initial estimate of response termination
-                    ax.axvline(x=times_trial_regular[index_left2]+1*jitter,color='green',linestyle='dashed') #final estimate of response initiation
-                    ax.axvline(x=times_trial_regular[index_right2]+1*jitter,color='red',linestyle='dashed') #final estimate of response termination
+                    
+                    if plot and i < nrows*ncols:
+                        ax.axvline(x=times_trial_regular[index_left]+0*jitter,color='green') #initial estimate of response initiation
+                        ax.axvline(x=times_trial_regular[index_right]+0*jitter,color='red') #initial estimate of response termination
+                        ax.axvline(x=times_trial_regular[index_left2]+1*jitter,color='green',linestyle='dashed') #final estimate of response initiation
+                        ax.axvline(x=times_trial_regular[index_right2]+1*jitter,color='red',linestyle='dashed') #final estimate of response termination
                 
     if plot: 
         fig.tight_layout()
@@ -371,3 +373,9 @@ def extract_subject_result(r,n_trialsperemotion):
     r_durations = [r.end[i] - r.start[i] for i in range(n_trialsperemotion) if r_valid[i]]
     r_maxgrads = [r.max_grad[i] for i in range(n_trialsperemotion) if r_valid[i]] #OUTCOME 5
     return r_validperc,r_latencies,r_durations,r_maxgrads
+
+def get_slope(vector):
+    if type(vector)!=np.ndarray and np.isnan(vector): return np.nan
+    else:
+        slope,intercept = np.polyfit(range(len(vector)),vector,1)
+        return slope
