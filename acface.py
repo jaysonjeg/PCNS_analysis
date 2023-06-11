@@ -47,7 +47,7 @@ get_mean_ts=True
 get_mean_ts_pca=True 
 get_latencies=True 
 get_maxgrads=True
-to_plot=False
+to_plot=False #plots for each participant
 
 t['use_cface'] = ((include) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #those subjects whose cface data we will use
 
@@ -148,17 +148,17 @@ def get_outcomes(subject):
         #r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(r_an_pca0,n_trialsperemotion)
         #r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(r_ha_AU12,n_trialsperemotion) 
 
-    """Plotting"""
+    """Plotting for single subject"""
     if to_plot:       
-        plot_this_au_trial = lambda values,title: acface_utils.plot_this_au_trial(values,title,times_trial_regular,relevant_timestamps,relevant_labels,midpoint_timestamps)
+        plot_this_au_trial = lambda values,title,results: acface_utils.plot_this_au_trial(values,title,times_trial_regular,relevant_timestamps,relevant_labels,midpoint_timestamps,results=results)
         emot='ha'
         values = aus_trial[emot][:,:,ha_AU_index]
         title = f'{ha_AU} time series for some {emot} trials'
-        plot_this_au_trial(values,title)
+        plot_this_au_trial(values,title,other_metrics['ha'])
         emot='an'
         values = aus_trial_pca[emot][:,:,0]
         title = f'PCA comp 0 time series for some {emot} trials'
-        plot_this_au_trial(values,title)
+        plot_this_au_trial(values,title,other_metrics['an'])
 
         title = f'{ha_AU} time series for all SMILE trials'
         acface_utils.plot_this_au_trial_superimposed('ha',ha_AU_index,title,aus_trial,aus_trial_mean,aus_trial_mean2,relevant_timestamps,relevant_labels,midpoint_timestamps,times_trial_regular)
@@ -187,6 +187,7 @@ def get_outcomes(subject):
 
         #acface_utils.plot_pca_mapping(pca, aus_pca,aus_names)
         plt.show()
+        assert(0)
 
     return {'amp_max':ha_AU_trial_ha_max, 'amp_range':ha_AU_trial_ha_range,'mean_ts': aus_trial_mean,'mean_ts_pca':aus_trial_pca_mean, 'other_metrics':other_metrics}
     #return ha_AU_trial_ha_max
