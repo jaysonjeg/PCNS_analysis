@@ -10,10 +10,10 @@ from scipy import stats
 
 def get_data_table(subject):
     print(subject)
-    contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\FF1*\\") #find the FF1 folder for this subject
+    contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\FF1*") #find the FF1 folder for this subject
     assert(len(contents)==1) 
     resultsFolder=contents[0]
-    df=pd.read_csv(glob(f"{resultsFolder}*out.csv")[0]) # make log csv into dataframe
+    df=pd.read_csv(glob(f"{resultsFolder}\\*out.csv")[0]) # make log csv into dataframe
     emot=df['emot'].values 
     falsefeedback=(df['stim_FBmultiplier']!=1).values
     rating=df['rating'].values   
@@ -117,6 +117,14 @@ PT=((clinical_didmri_inc) & (t.valid_ffi==1)) #patient group
 SZ = sz_didmri_inc #schizophrenia subgroup
 SZA = sza_didmri_inc #schizoaffective subgroup
 HC,PT,SZ,SZA = subs[HC],subs[PT],subs[SZ],subs[SZA]
+
+subjects_to_exclude = [8,5,10,6,12,9,11,15,13,7,18,16,19,23,29,20,36,31,25] #these subjects heard audio feedback at a low volume (0.15 instead of 0.6) so many of them didn't even hear it
+
+HC = np.array([i for i in HC if int(i) not in subjects_to_exclude])
+PT = [i for i in PT if int(i) not in subjects_to_exclude]
+SZ = np.array([i for i in SZ if int(i) not in subjects_to_exclude])
+SZA = [i for i in SZA if int(i) not in subjects_to_exclude]
+
 
 HCdata = analyse_group_beh(HC[:],'HC')
 #PTdata = analyse_group_beh(PT[:],'PT')

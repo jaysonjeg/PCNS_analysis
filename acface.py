@@ -87,7 +87,7 @@ def get_outcomes(subject):
     times_eachframe = interp_frametimes(all_frames) #get time since onset for each frame number, corresponding to rows of aus
     interp_aus = interp1d(times_eachframe, aus, axis=0, kind='linear',fill_value = 'extrapolate')
     times_regular = np.arange(0,np.max(times_eachframe),1/target_fps)
-    aust = interp_aus(times_regular) 
+    aust = interp_aus(times_regular) #not really used subsequently...
     aust = pd.DataFrame(aust)
     aust.columns=aus.columns
 
@@ -246,6 +246,27 @@ def sns_plot(**kwargs):
 def pval(column_name):
     tstat,p=ttest_ind(t.loc[hc & t.use_cface,column_name].dropna(),t.loc[sz & t.use_cface,column_name].dropna())
     return p
+def print_corr(subgroup,column_name1,column_name2):
+    r=np.corrcoef(t.loc[t.use_cface & t.cface_latencies_validperc_ha & subgroup,column_name1],t.loc[t.use_cface & t.cface_latencies_validperc_ha & subgroup,column_name2])[0,1]
+    print(f'{column_name1} vs {column_name2}: {r:.2f}')
+
+#Print some correlations
+print_corr(hc|sz|sza,'cface_latencies_mean_ha','cface_amp_max_mean')
+print_corr(hc|sz|sza, 'cface_amp_max_mean','cface_maxgrads_mean_ha')
+
+print_corr(sz|sza, 'sofas','cface_amp_max_mean')
+print_corr(sz|sza, 'cgi_s','cface_amp_max_mean')
+print_corr(sz|sza, 'panss_P','cface_amp_max_mean')
+print_corr(sz|sza, 'panss_N','cface_amp_max_mean')
+print_corr(sz|sza, 'panss_bluntedaffect','cface_amp_max_mean')
+print_corr(sz|sza, 'meds_chlor','cface_amp_max_mean')
+
+print_corr(sz|sza, 'sofas','cface_latencies_mean_ha')
+print_corr(sz|sza, 'cgi_s','cface_latencies_mean_ha')
+print_corr(sz|sza, 'panss_P','cface_latencies_mean_ha')
+print_corr(sz|sza, 'panss_N','cface_latencies_mean_ha')
+print_corr(sz|sza, 'panss_bluntedaffect','cface_latencies_mean_ha')
+print_corr(sz|sza, 'meds_chlor','cface_latencies_mean_ha')
 
 #Look at amplitudes
 fig,axs=plt.subplots(2)

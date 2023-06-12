@@ -118,4 +118,13 @@ sas = t[sas_labels].sum(axis=1)
 panss_bluntedaffect = t['panss_n1']
 panss_anxiety = t['panss_g2']
 panss_tension = t['panss_g4']
+t['panss_P']=panss_P
+t['panss_N']=panss_N
+t['panss_G']=panss_G
+t['hamd']=hamd
+t['ymrs']=ymrs
+t['sas']=sas
+t['panss_bluntedaffect']=panss_bluntedaffect
+t['panss_anxiety']=panss_anxiety
+t['panss_tension']=panss_tension
 #'meds_chlor' for chlor equivalents, 'cgi_s' for CGI, 'sofas' for SOFAS
