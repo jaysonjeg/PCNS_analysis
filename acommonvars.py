@@ -39,6 +39,7 @@ elif pc=='home':
         data_folder="Z:\\NEWYSNG\\Shiami_DICOM\\Psychosis\\PCNS"
     elif files_source == 'local':
         data_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw"
+        temp_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_analysis\\temp"
 redcap_file = "C:\\Users\\Jayson\OneDrive - The University Of Newcastle\\Drive\\PhD\\Project_PCNS\\BackupRedcap\\PCNS_redcap_data_table_01.csv"
 
 '''
