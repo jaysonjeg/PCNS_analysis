@@ -292,7 +292,7 @@ def get_outcomes(subject,to_plot_subject):
         sns.despine()
 
     #### Get PPG data and calculate heart rate
-    drop, bpm_std, bpm_df = [], [], pd.DataFrame([]) #bpm_df will contain the sequence of all bpms (using RR intervals)
+    drop, RR_list, RRdiff_list, bpm_df = [], [], [], pd.DataFrame([]) #bpm_df will contain the sequence of all bpms (using RR intervals)
     clean_df = df.copy()
     clean_df['HeartRateOutlier'] = np.zeros(len(clean_df), dtype='bool')
     for i, trial in enumerate(signal_df.nTrial.unique()):
@@ -301,10 +301,16 @@ def get_outcomes(subject,to_plot_subject):
         
         signal, peaks = oxi_peaks(this_df.signal, sfreq=1000) 
         bpm = 60000/np.diff(np.where(peaks)[0]) #calculate each RR interval and convert to bpm. Each trial will have about 5 of these
-        
         bpm_df = bpm_df.append(pd.DataFrame({'bpm': bpm, 'nEpoch': i, 'nTrial': trial}))
+        RR = np.diff(np.where(peaks)[0]) #RR intervals (ms)
+        RR_list.append(list(RR))
+        RRdiff = np.diff(RR) #difference between consecutive RR intervals (ms)
+        RRdiff_list.append(list(RRdiff))
+
     r['Intero']['bpm_mean'] = bpm_df.bpm.mean()
     r['Intero']['bpm_std'] = bpm_df.bpm.std()
+    r['Intero']['RR_std'] = np.std(RR_list)
+    r['Intero']['RMSDD'] = np.sqrt(np.mean(np.square(RRdiff_list))) #root mean square of successive differences between RR intervals
 
     # Check for outliers in the absolute value of RR intervals 
     for e, j in zip(bpm_df.nEpoch[pg.madmedianrule(bpm_df.bpm.to_numpy())].unique(),
@@ -377,10 +383,14 @@ def get_outcomes(subject,to_plot_subject):
     return r, task_duration
 
 
-outcomes,durations = get_outcomes('015',True) #015 has dramatic threshold, 073 weird confidences
-assert(0)
 
-load_table=True
+PT = 'cc' #'cc', 'sz'
+print(f'Analyses below compare hc with {PT}')
+
+#outcomes,durations = get_outcomes('015',True) #015 has dramatic threshold, 073 weird confidences
+#assert(0)
+
+load_table=False
 
 if load_table:
     t = pd.read_csv(f'{temp_folder}\\outcomes_myhrd.csv')
@@ -427,37 +437,29 @@ print(f'hc, n={sum(t.use_hrd & hc)}')
 print(f'cc, n={sum(t.use_hrd & cc)}')
 print(f'sz, n={sum(t.use_hrd & sz)}')
 for cond in ['Intero','Extero']:
-    compare('hc','cc',f'hrd_{cond}_dprime',has_sdt)
-    compare('hc','sz',f'hrd_{cond}_dprime',has_sdt)
-    compare('hc','cc',f'hrd_{cond}_criterion',has_sdt)
-    compare('hc','sz',f'hrd_{cond}_criterion',has_sdt)
-    compare('hc','cc',f'hrd_{cond}_threshold')
-    compare('hc','sz',f'hrd_{cond}_threshold',to_plot_compare=to_plot)
-    compare('hc','cc',f'hrd_{cond}_threshold_abs')
-    compare('hc','sz',f'hrd_{cond}_threshold_abs')
-    compare('hc','cc',f'hrd_{cond}_slope')
-    compare('hc','sz',f'hrd_{cond}_slope',to_plot_compare=to_plot)
+    compare('hc',PT,f'hrd_{cond}_dprime',has_sdt)
+    compare('hc',PT,f'hrd_{cond}_criterion',has_sdt)
+    compare('hc',PT,f'hrd_{cond}_threshold',to_plot_compare=to_plot)
+    compare('hc',PT,f'hrd_{cond}_threshold_abs')
+    compare('hc',PT,f'hrd_{cond}_slope',to_plot_compare=to_plot)
 
-compare('hc','cc',f'hrd_Intero_bpm_mean')
-compare('hc','sz',f'hrd_Intero_bpm_mean',to_plot_compare=to_plot)
-compare('hc','cc',f'hrd_Intero_bpm_std',to_plot_compare=to_plot)
-compare('hc','sz',f'hrd_Intero_bpm_std')
-plt.show(block=False)
+compare('hc',PT,f'hrd_Intero_bpm_mean',to_plot_compare=to_plot)
+compare('hc',PT,f'hrd_Intero_bpm_std',to_plot_compare=to_plot)
 
 print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_bpm_std')
-print_corr('cc','hrd_Intero_bpm_mean','hrd_Intero_bpm_std')
+print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_bpm_std')
 print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_dprime',has_sdt)
 print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_criterion',has_sdt)
 print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_threshold') 
 print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_threshold_abs')
-print_corr('cc','hrd_Intero_bpm_mean','hrd_Intero_threshold')
-print_corr('cc','hrd_Intero_bpm_mean','hrd_Intero_threshold_abs')
+print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold')
+print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_abs')
 print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_slope')
-print_corr('cc','hrd_Intero_bpm_mean','hrd_Intero_slope')
+print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_slope')
 print_corr('hc','hrd_Intero_bpm_std','hrd_Intero_threshold') #is diversity in threshold linked to high BPM?
-print_corr('cc','hrd_Intero_bpm_std','hrd_Intero_threshold')
+print_corr(PT,'hrd_Intero_bpm_std','hrd_Intero_threshold')
 print_corr('hc','hrd_Intero_bpm_std','hrd_Intero_slope')
-print_corr('cc','hrd_Intero_bpm_std','hrd_Intero_slope')
+print_corr(PT,'hrd_Intero_bpm_std','hrd_Intero_slope')
 
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
@@ -473,7 +475,7 @@ for i in range(len(t)):
 model = ols('hrd_threshold_abs ~ group + cond + group:cond', data=data).fit()
 anova_table = sm.stats.anova_lm(model, typ=2)
 print(anova_table) #No significant interaction 
-
+plt.show(block=False)
 
 #Interaction terms of group and intero/extero on threshold
 

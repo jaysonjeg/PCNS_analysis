@@ -40,7 +40,7 @@ elif pc=='home':
     elif files_source == 'local':
         data_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw"
         temp_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_analysis\\temp"
-redcap_file = "C:\\Users\\Jayson\OneDrive - The University Of Newcastle\\Drive\\PhD\\Project_PCNS\\BackupRedcap\\PCNS_redcap_data_table_01.csv"
+redcap_file = "D:\\OneDrive - The University Of Newcastle\\Drive\PhD\\Project_PCNS\\BackupRedcap\\PCNS_redcap_data_table_01.csv"
 
 '''
 data_folder="G:\\My Drive\\Share_Angelica\\Data_raw\\per_subject"
