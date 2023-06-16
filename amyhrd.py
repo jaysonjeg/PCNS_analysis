@@ -22,9 +22,7 @@ from glob import glob
 import re
 from acommonvars import *
 
-to_print_subject=False
-to_plot_subject=False
-to_plot=True
+
 t['use_hrd'] = ((include) & (t.valid_hrdo==1)) #those subjects whose HRD data we will use
 
 subjects_to_exclude_confidence = ['073']
@@ -383,7 +381,9 @@ def get_outcomes(subject,to_plot_subject):
     return r, task_duration
 
 
-
+to_print_subject=False
+to_plot_subject=False
+to_plot=True
 PT = 'cc' #'cc', 'sz'
 print(f'Analyses below compare hc with {PT}')
 
@@ -428,10 +428,37 @@ def print_corr(subgroup,column_name1,column_name2,include_these=None):
         include_these = np.array([True]*len(t)) #array of all Trues to include all rows
     r=np.corrcoef(t.loc[t.use_hrd & eval(subgroup) & include_these,column_name1],t.loc[t.use_hrd & eval(subgroup) & include_these,column_name2])[0,1]
     print(f'{subgroup}: {column_name1} vs {column_name2}: r={r:.2f}')
+def scatter(group1,group2,column_name1,column_name2):
+    """
+    Scatter plot of column_name1 vs column_name2 from DataFrame t. Scatter points are colored by group1 and group2. Put correlation coefficient within each group on the title. Also plot a line of best fit for each group, spanning the range of x values.
+    """
+    fig, ax = plt.subplots()
+    ax.scatter(t.loc[t.use_hrd & eval(group1),column_name1],t.loc[t.use_hrd & eval(group1),column_name2],label=group1,color=colors[group1])
+    ax.scatter(t.loc[t.use_hrd & eval(group2),column_name1],t.loc[t.use_hrd & eval(group2),column_name2],label=group2,color=colors[group2])
+    r_group1 = np.corrcoef(t.loc[t.use_hrd & eval(group1),column_name1],t.loc[t.use_hrd & eval(group1),column_name2])
+    r_group2 = np.corrcoef(t.loc[t.use_hrd & eval(group2),column_name1],t.loc[t.use_hrd & eval(group2),column_name2])
+    #Plot a line of best fit for each group, spanning the current range of x values
+    x = np.linspace(min(t.loc[t.use_hrd & eval(group1),column_name1].min(),t.loc[t.use_hrd & eval(group2),column_name1].min()),max(t.loc[t.use_hrd & eval(group1),column_name1].max(),t.loc[t.use_hrd & eval(group2),column_name1].max()),100)
+    y_group1 = np.poly1d(np.polyfit(t.loc[t.use_hrd & eval(group1),column_name1],t.loc[t.use_hrd & eval(group1),column_name2],1))(x)
+    y_group2 = np.poly1d(np.polyfit(t.loc[t.use_hrd & eval(group2),column_name1],t.loc[t.use_hrd & eval(group2),column_name2],1))(x)
+    ax.plot(x,y_group1,color=colors[group1])
+    ax.plot(x,y_group2,color=colors[group2])
+    ax.set_xlabel(column_name1)
+    ax.set_ylabel(column_name2)
+    ax.set_title(f'{group1}: r={r_group1:.2f}, {group2}: r={r_group2:.2f})')
+    ax.legend([group1,group2])
+    fig.tight_layout()
+
 
 t['hrd_Intero_threshold_abs'] = np.abs(t.hrd_Intero_threshold)
 t['hrd_Extero_threshold_abs'] = np.abs(t.hrd_Extero_threshold)
 has_sdt = ~t.hrd_Intero_dprime.isnull()
+
+
+scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_RR_std')
+scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_RMSSD')
+scatter('hc',PT,'hrd_Intero_bpm_mean','meds_chlor')
+scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_abs')
 
 print(f'hc, n={sum(t.use_hrd & hc)}')
 print(f'cc, n={sum(t.use_hrd & cc)}')
@@ -444,7 +471,8 @@ for cond in ['Intero','Extero']:
     compare('hc',PT,f'hrd_{cond}_slope',to_plot_compare=to_plot)
 
 compare('hc',PT,f'hrd_Intero_bpm_mean',to_plot_compare=to_plot)
-compare('hc',PT,f'hrd_Intero_bpm_std',to_plot_compare=to_plot)
+compare('hc',PT,f'hrd_Intero_RMSSD',to_plot_compare=to_plot)
+compare('hc',PT,f'hrd_Intero_RR_std',to_plot_compare=to_plot)
 
 print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_bpm_std')
 print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_bpm_std')
@@ -456,10 +484,14 @@ print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold')
 print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_abs')
 print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_slope')
 print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_slope')
-print_corr('hc','hrd_Intero_bpm_std','hrd_Intero_threshold') #is diversity in threshold linked to high BPM?
-print_corr(PT,'hrd_Intero_bpm_std','hrd_Intero_threshold')
-print_corr('hc','hrd_Intero_bpm_std','hrd_Intero_slope')
-print_corr(PT,'hrd_Intero_bpm_std','hrd_Intero_slope')
+print_corr('hc','hrd_Intero_RR_std','hrd_Intero_threshold') 
+print_corr(PT,'hrd_Intero_RR_std','hrd_Intero_threshold')
+print_corr('hc','hrd_Intero_RR_std','hrd_Intero_slope')
+print_corr(PT,'hrd_Intero_RR_std','hrd_Intero_slope')
+print_corr('hc','hrd_Intero_RMSSD','hrd_Intero_threshold') 
+print_corr(PT,'hrd_Intero_RMSSD','hrd_Intero_threshold')
+print_corr('hc','hrd_Intero_RMSSD','hrd_Intero_slope')
+print_corr(PT,'hrd_Intero_RMSSD','hrd_Intero_slope')
 
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
