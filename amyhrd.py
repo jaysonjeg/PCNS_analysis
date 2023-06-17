@@ -301,14 +301,14 @@ def get_outcomes(subject,to_plot_subject):
         bpm = 60000/np.diff(np.where(peaks)[0]) #calculate each RR interval and convert to bpm. Each trial will have about 5 of these
         bpm_df = bpm_df.append(pd.DataFrame({'bpm': bpm, 'nEpoch': i, 'nTrial': trial}))
         RR = np.diff(np.where(peaks)[0]) #RR intervals (ms)
-        RR_list.append(list(RR))
+        RR_list += list(RR)
         RRdiff = np.diff(RR) #difference between consecutive RR intervals (ms)
-        RRdiff_list.append(list(RRdiff))
+        RRdiff_list += list(RRdiff)
 
     r['Intero']['bpm_mean'] = bpm_df.bpm.mean()
     r['Intero']['bpm_std'] = bpm_df.bpm.std()
     r['Intero']['RR_std'] = np.std(RR_list)
-    r['Intero']['RMSDD'] = np.sqrt(np.mean(np.square(RRdiff_list))) #root mean square of successive differences between RR intervals
+    r['Intero']['RMSSD'] = np.sqrt(np.mean(np.square(RRdiff_list))) #root mean square of successive differences between RR intervals
 
     # Check for outliers in the absolute value of RR intervals 
     for e, j in zip(bpm_df.nEpoch[pg.madmedianrule(bpm_df.bpm.to_numpy())].unique(),
@@ -390,7 +390,7 @@ print(f'Analyses below compare hc with {PT}')
 #outcomes,durations = get_outcomes('015',True) #015 has dramatic threshold, 073 weird confidences
 #assert(0)
 
-load_table=False
+load_table=True
 
 if load_table:
     t = pd.read_csv(f'{temp_folder}\\outcomes_myhrd.csv')
@@ -435,8 +435,8 @@ def scatter(group1,group2,column_name1,column_name2):
     fig, ax = plt.subplots()
     ax.scatter(t.loc[t.use_hrd & eval(group1),column_name1],t.loc[t.use_hrd & eval(group1),column_name2],label=group1,color=colors[group1])
     ax.scatter(t.loc[t.use_hrd & eval(group2),column_name1],t.loc[t.use_hrd & eval(group2),column_name2],label=group2,color=colors[group2])
-    r_group1 = np.corrcoef(t.loc[t.use_hrd & eval(group1),column_name1],t.loc[t.use_hrd & eval(group1),column_name2])
-    r_group2 = np.corrcoef(t.loc[t.use_hrd & eval(group2),column_name1],t.loc[t.use_hrd & eval(group2),column_name2])
+    r_group1 = np.corrcoef(t.loc[t.use_hrd & eval(group1),column_name1],t.loc[t.use_hrd & eval(group1),column_name2])[0,1]
+    r_group2 = np.corrcoef(t.loc[t.use_hrd & eval(group2),column_name1],t.loc[t.use_hrd & eval(group2),column_name2])[0,1]
     #Plot a line of best fit for each group, spanning the current range of x values
     x = np.linspace(min(t.loc[t.use_hrd & eval(group1),column_name1].min(),t.loc[t.use_hrd & eval(group2),column_name1].min()),max(t.loc[t.use_hrd & eval(group1),column_name1].max(),t.loc[t.use_hrd & eval(group2),column_name1].max()),100)
     y_group1 = np.poly1d(np.polyfit(t.loc[t.use_hrd & eval(group1),column_name1],t.loc[t.use_hrd & eval(group1),column_name2],1))(x)
@@ -457,7 +457,7 @@ has_sdt = ~t.hrd_Intero_dprime.isnull()
 
 scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_RR_std')
 scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_RMSSD')
-scatter('hc',PT,'hrd_Intero_bpm_mean','meds_chlor')
+scatter(PT,PT,'hrd_Intero_bpm_mean','meds_chlor')
 scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_abs')
 
 print(f'hc, n={sum(t.use_hrd & hc)}')
