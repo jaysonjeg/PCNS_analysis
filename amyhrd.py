@@ -7,21 +7,19 @@ PPG was actually recorded at 100Hz but resampled to 1000Hz before saving as sign
 
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.stats import norm
 import seaborn as sns
 import numpy as np
 from metadPy import sdt
 from metadPy.utils import trials2counts, discreteRatings
 from metadPy.plotting import plot_confidence
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
 from systole.detection import oxi_peaks
 import pingouin as pg
 from glob import glob
-import re
+import statsmodels.api as sm
+from statsmodels.formula.api import ols
 from acommonvars import *
-
+from scipy.stats import spearmanr, pearsonr, norm, mannwhitneyu, ttest_ind
+from sklearn.linear_model import LinearRegression, TheilSenRegressor
 
 t['use_hrd'] = ((include) & (t.valid_hrdo==1)) #those subjects whose HRD data we will use
 
@@ -386,6 +384,7 @@ to_plot_subject=False
 to_plot=True
 PT = 'cc' #'cc', 'sz'
 print(f'Analyses below compare hc with {PT}')
+robust=True #robust statistical analyses, or otherwise usual analyses (pearson r, t-test)
 
 #outcomes,durations = get_outcomes('015',True) #015 has dramatic threshold, 073 weird confidences
 #assert(0)
@@ -406,16 +405,22 @@ else:
 
 
 
+
 """
 r: Outer level keys are 'Intero', 'Extero'. Inner level keys are quality measures (Q_wrong_decisions_took_longer, Q_wrong_decisions_lower_confidence, Q_confidence_occurence_max, Q_HR_outlier_perc), SDT measures (dprime, criterion), psychophysics measures (threshold, slope), HR measures (bpm_mean, bpm_std) (HR not present for Extero condition)
 """
-from scipy.stats import ttest_ind
 def compare(subgroup1,subgroup2,column,include_these=None,to_plot_compare=False):
+    """
+    Plot strip-plot of sample values in each group. Compare sample means with t-test and p-value. Also return bootstrapped confidence intervals (robust to outliers)
+    """
     if include_these is None:
         include_these=t.iloc[:,0].copy()
         include_these[:]=True #array of all Trues to include all rows
-    tstat,pval = ttest_ind(t.loc[t.use_hrd & eval(subgroup1) & include_these, column] , t.loc[t.use_hrd & eval(subgroup2) & include_these, column])        
-    print(f'{column}\t {subgroup1} vs {subgroup2}:\t t= {tstat:.2f}, p= {pval:.2f}')
+    x = t.loc[t.use_hrd & eval(subgroup1) & include_these, column]
+    y = t.loc[t.use_hrd & eval(subgroup2) & include_these, column]
+    tstat,pval = ttest_ind(x,y)          
+    mean_diff = np.mean(x)-np.mean(y)
+    print(f'{column}\t {subgroup1} vs {subgroup2}:\t meandiff={mean_diff:.2f}, ttest p={pval:.2f} MW p={mannwhitneyu(x,y).pvalue:.2f}')
     if to_plot_compare:
         fig, ax = plt.subplots()
         sns.set_context('talk')
@@ -423,29 +428,32 @@ def compare(subgroup1,subgroup2,column,include_these=None,to_plot_compare=False)
         fig.tight_layout()
         sns.despine()
     return tstat,pval
-def print_corr(subgroup,column_name1,column_name2,include_these=None):
-    if include_these is None:
-        include_these = np.array([True]*len(t)) #array of all Trues to include all rows
-    r=np.corrcoef(t.loc[t.use_hrd & eval(subgroup) & include_these,column_name1],t.loc[t.use_hrd & eval(subgroup) & include_these,column_name2])[0,1]
-    print(f'{subgroup}: {column_name1} vs {column_name2}: r={r:.2f}')
-def scatter(group1,group2,column_name1,column_name2):
+def scatter(group1,group2,column_name1,column_name2,robust=robust):
     """
-    Scatter plot of column_name1 vs column_name2 from DataFrame t. Scatter points are colored by group1 and group2. Put correlation coefficient within each group on the title. Also plot a line of best fit for each group, spanning the range of x values.
+    Scatter plot of column_name1 vs column_name2 from DataFrame t. Scatter points are colored by group1 and group2. Put correlation within each group on the title. Also plot a line of best fit for each group
     """
+    if robust: 
+        corr_func = spearmanr
+        reg_func = TheilSenRegressor
+    else: 
+        corr_func= pearsonr
+        reg_func = LinearRegression
     fig, ax = plt.subplots()
-    ax.scatter(t.loc[t.use_hrd & eval(group1),column_name1],t.loc[t.use_hrd & eval(group1),column_name2],label=group1,color=colors[group1])
-    ax.scatter(t.loc[t.use_hrd & eval(group2),column_name1],t.loc[t.use_hrd & eval(group2),column_name2],label=group2,color=colors[group2])
-    r_group1 = np.corrcoef(t.loc[t.use_hrd & eval(group1),column_name1],t.loc[t.use_hrd & eval(group1),column_name2])[0,1]
-    r_group2 = np.corrcoef(t.loc[t.use_hrd & eval(group2),column_name1],t.loc[t.use_hrd & eval(group2),column_name2])[0,1]
-    #Plot a line of best fit for each group, spanning the current range of x values
-    x = np.linspace(min(t.loc[t.use_hrd & eval(group1),column_name1].min(),t.loc[t.use_hrd & eval(group2),column_name1].min()),max(t.loc[t.use_hrd & eval(group1),column_name1].max(),t.loc[t.use_hrd & eval(group2),column_name1].max()),100)
-    y_group1 = np.poly1d(np.polyfit(t.loc[t.use_hrd & eval(group1),column_name1],t.loc[t.use_hrd & eval(group1),column_name2],1))(x)
-    y_group2 = np.poly1d(np.polyfit(t.loc[t.use_hrd & eval(group2),column_name1],t.loc[t.use_hrd & eval(group2),column_name2],1))(x)
-    ax.plot(x,y_group1,color=colors[group1])
-    ax.plot(x,y_group2,color=colors[group2])
+    if robust: title_string = 'Robust: '
+    else: title_string = 'Non-robust: '
+    for group in [group1,group2]:
+        x = t.loc[t.use_hrd & eval(group),column_name1]
+        y = t.loc[t.use_hrd & eval(group),column_name2]
+        r,p = corr_func(x,y)
+        xnew = np.linspace(min(x),max(x),100)
+        reg = reg_func().fit(x.values.reshape(-1,1),y.values)
+        ynew = reg.predict(xnew.reshape(-1,1))
+        ax.scatter(x,y,label=group,color=colors[group])
+        ax.plot(xnew,ynew,color=colors[group])
+        title_string += f'{group}: r={r:.2f} p={p:.2f}, '
     ax.set_xlabel(column_name1)
     ax.set_ylabel(column_name2)
-    ax.set_title(f'{group1}: r={r_group1:.2f}, {group2}: r={r_group2:.2f})')
+    ax.set_title(title_string[:-2])
     ax.legend([group1,group2])
     fig.tight_layout()
 
@@ -454,11 +462,23 @@ t['hrd_Intero_threshold_abs'] = np.abs(t.hrd_Intero_threshold)
 t['hrd_Extero_threshold_abs'] = np.abs(t.hrd_Extero_threshold)
 has_sdt = ~t.hrd_Intero_dprime.isnull()
 
+x=t.loc[t.use_hrd & hc , 'hrd_Extero_threshold_abs']
+z=t.loc[t.use_hrd & eval(PT) , 'hrd_Extero_threshold_abs']
+y=t.loc[t.use_hrd & eval(PT) , 'hrd_Extero_threshold_abs']
 
 scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_RR_std')
 scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_RMSSD')
 scatter(PT,PT,'hrd_Intero_bpm_mean','meds_chlor')
+scatter('hc',PT,'hrd_Intero_threshold_abs','hrd_Extero_threshold_abs')
+
+scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Extero_threshold_abs')
 scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_abs')
+scatter('hc',PT,'hrd_Intero_RR_std','hrd_Intero_threshold_abs')
+scatter('hc',PT,'hrd_Intero_RMSSD','hrd_Intero_threshold_abs')
+
+scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_slope')
+scatter('hc',PT,'hrd_Intero_RR_std','hrd_Intero_slope')
+scatter('hc',PT,'hrd_Intero_RMSSD','hrd_Intero_slope')
 
 print(f'hc, n={sum(t.use_hrd & hc)}')
 print(f'cc, n={sum(t.use_hrd & cc)}')
@@ -474,55 +494,23 @@ compare('hc',PT,f'hrd_Intero_bpm_mean',to_plot_compare=to_plot)
 compare('hc',PT,f'hrd_Intero_RMSSD',to_plot_compare=to_plot)
 compare('hc',PT,f'hrd_Intero_RR_std',to_plot_compare=to_plot)
 
-print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_bpm_std')
-print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_bpm_std')
-print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_dprime',has_sdt)
-print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_criterion',has_sdt)
-print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_threshold') 
-print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_threshold_abs')
-print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold')
-print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_abs')
-print_corr('hc','hrd_Intero_bpm_mean','hrd_Intero_slope')
-print_corr(PT,'hrd_Intero_bpm_mean','hrd_Intero_slope')
-print_corr('hc','hrd_Intero_RR_std','hrd_Intero_threshold') 
-print_corr(PT,'hrd_Intero_RR_std','hrd_Intero_threshold')
-print_corr('hc','hrd_Intero_RR_std','hrd_Intero_slope')
-print_corr(PT,'hrd_Intero_RR_std','hrd_Intero_slope')
-print_corr('hc','hrd_Intero_RMSSD','hrd_Intero_threshold') 
-print_corr(PT,'hrd_Intero_RMSSD','hrd_Intero_threshold')
-print_corr('hc','hrd_Intero_RMSSD','hrd_Intero_slope')
-print_corr(PT,'hrd_Intero_RMSSD','hrd_Intero_slope')
-
-import statsmodels.api as sm
-from statsmodels.formula.api import ols
-#Concatenate the intero and extero thresholds abs columns vertically to a new dataframe
-data = pd.DataFrame(columns=['hrd_threshold_abs','group','cond'])
+#Do Intero/Extero and group (HC/CC) interact to determine |threshold|?. To answer this first concatenate the intero and extero thresholds abs columns vertically to a new dataframe
+data = pd.DataFrame(columns=['hrd_threshold_abs','hrd_slope','group','cond'])
 for i in range(len(t)):
     if t.loc[i,'use_hrd'] & (hc|sz|sza)[i]:
         if hc[i]: group='hc'
         else: group='cc'
         for cond in ['Intero','Extero']:
-            data=data.append({'hrd_threshold_abs':t.at[i,f'hrd_{cond}_threshold_abs'],'group':group,'cond':cond},ignore_index=True)
-
+            data=data.append({'hrd_threshold_abs':t.at[i,f'hrd_{cond}_threshold_abs'],'hrd_slope':t.at[i,f'hrd_{cond}_slope'], 'group':group,'cond':cond},ignore_index=True)
 model = ols('hrd_threshold_abs ~ group + cond + group:cond', data=data).fit()
 anova_table = sm.stats.anova_lm(model, typ=2)
+print('hrd_threshold_abs ~ group + cond + group:cond')
 print(anova_table) #No significant interaction 
+model = ols('hrd_slope ~ group + cond + group:cond', data=data).fit()
+anova_table = sm.stats.anova_lm(model, typ=2)
+print('hrd_slope ~ group + cond + group:cond')
+print(anova_table) #No significant interaction 
+
+#ax=pg.plot_paired(data=data,dv='hrd_threshold_abs',within='cond',subject='hrd_slope')
+
 plt.show(block=False)
-
-#Interaction terms of group and intero/extero on threshold
-
-#PM_mean/std vs clinical measures. SDT/psychophysics measures vs clinical measures. Do SZ have tendency towards non-zero threshold? Is this purely because of poor task performance, ie low slope???
-#Scatterplot of BPM_mean and BPM_std, coloured by group membership
-#Scatterplot of BPM_mean and threshold, coloured by group membership
-#HR vs psych meds
-#Try CV instead of STD for HRV
-#HC sv CC: Kolgomorov-Smirnoff: 
-
-"""
-Results so far: 
-SZ have reduced mean heartrate and reduced HRV. Association between mean HR and HRV in controls is low (r=0.05)
-SZ have lesser exteroceptive discrminability (d') (p=0.02) but no group difference in interoceptive discriminability (p=0.22). 
-SZ have greater exteroceptive slope (p=0.01) and trend towards greater interoceptive slope (p=0.09) (more confident?). 
-SZ have greater absolute value of threshold for exteroception and interoception (both p ~ 0.01). There was no interaction between group (HC/CC) and condition (inter/extero) for abs(threshold)
-
-"""
