@@ -81,6 +81,10 @@ for i in range(len(t)):
     if hc[i]: t.at[i,'group01']='hc'
     if sz[i]: t.at[i,'group01']='sz'
     if sza[i]: t.at[i,'group01']='sza'
+t['group02']=''
+for i in range(len(t)):
+    if hc[i]: t.at[i,'group01']='hc'
+    else: t.at[i,'group01']='cc'
 
 hc_color='green'
 cc_color='brown'
