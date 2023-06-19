@@ -17,6 +17,7 @@ import pingouin as pg
 from glob import glob
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
+import acommonfuncs
 from acommonvars import *
 from scipy.stats import spearmanr, pearsonr, norm, mannwhitneyu, ttest_ind, zscore
 from sklearn.linear_model import LinearRegression, TheilSenRegressor
@@ -382,7 +383,7 @@ def get_outcomes(subject,to_plot_subject):
 to_print_subject=False
 to_plot_subject=False
 to_plot=True
-PT = 'cc' #patient group: 'cc', 'sz'
+PT = 'sz' #patient group: 'cc', 'sz'
 print(f'Analyses below compare hc with {PT}')
 robust=True #robust statistical analyses, or otherwise usual analyses (pearson r, t-test)
 
@@ -403,6 +404,7 @@ else:
                     t.loc[i,f'hrd_{cond}_{j}']=outcomes[cond][j]
     t.to_csv(f'{temp_folder}\\outcomes_myhrd.csv')
 
+t=acommonfuncs.add_table(t,'outcomes_cface.csv')
 
 t['group03'] = '' #make a new group column with two groups: hc and PT
 for i in range(len(t)):
@@ -435,10 +437,13 @@ def compare(subgroup1,subgroup2,column,include_these=None,to_plot_compare=False)
         sns.despine()
     else:
         print(f'{column}\t {subgroup1} vs {subgroup2}:\t meandiff={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
-def scatter(group1,group2,column_name1,column_name2,robust=robust):
+def scatter(group1,group2,column_name1,column_name2,robust=robust,include_these=None):
     """
     Scatter plot of column_name1 vs column_name2 from DataFrame t. Scatter points are colored by group1 and group2. Put correlation within each group on the title. Also plot a line of best fit for each group
     """
+    if include_these is None:
+        include_these=t.iloc[:,0].copy()
+        include_these[:]=True #array of all Trues to include all rows
     if robust: 
         corr_func = spearmanr
         reg_func = TheilSenRegressor
@@ -449,8 +454,8 @@ def scatter(group1,group2,column_name1,column_name2,robust=robust):
     if robust: title_string = 'Robust: '
     else: title_string = 'Non-robust: '
     for group in [group1,group2]:
-        x = t.loc[t.use_hrd & eval(group),column_name1]
-        y = t.loc[t.use_hrd & eval(group),column_name2]
+        x = t.loc[t.use_hrd & include_these & eval(group),column_name1]
+        y = t.loc[t.use_hrd & include_these & eval(group),column_name2]
         r,p = corr_func(x,y)
         xnew = np.linspace(min(x),max(x),100)
         reg = reg_func().fit(x.values.reshape(-1,1),y.values)
@@ -469,23 +474,45 @@ t['hrd_Intero_threshold_abs'] = np.abs(t.hrd_Intero_threshold)
 t['hrd_Extero_threshold_abs'] = np.abs(t.hrd_Extero_threshold)
 t['hrd_Intero_threshold_adj_abs'] = np.abs(t.hrd_Intero_threshold_adj)
 
-has_sdt = ~t.hrd_Intero_dprime.isnull()
 
+
+has_sdt = ~t.hrd_Intero_dprime.isnull()
 
 Extero_zscores = zscore(t.hrd_Extero_threshold,nan_policy='omit')
 Intero_zscores = zscore(t.hrd_Intero_threshold,nan_policy='omit')
-not_outliers = (np.abs(Extero_zscores)<3) & (np.abs(Intero_zscores)<3) #define outliers as being more than 3 standard deviations from the mean for exteroceptive or interoceptive thresholds
+outlier_cutoff = 2.5
+not_outliers = (np.abs(Extero_zscores)<outlier_cutoff) & (np.abs(Intero_zscores)<outlier_cutoff) #define outliers as being more than 3 standard deviations from the mean for exteroceptive or interoceptive thresholds
 
-x=t.loc[t.use_hrd & hc , 'hrd_Intero_threshold']
-y=t.loc[t.use_hrd & hc , 'hrd_Extero_threshold']
+t.use_hrd = t.use_hrd & not_outliers #to exclude outliers from analyses
+
+#x=t.loc[t.use_hrd & hc , 'hrd_Intero_threshold']
+#y=t.loc[t.use_hrd & hc , 'hrd_Extero_threshold']
+
+#Use robust regression to adjust interoceptive thresholds for exteroceptive thresholds
+x = t.loc[t.use_hrd & not_outliers,'hrd_Extero_threshold']
+y = t.loc[t.use_hrd & not_outliers,'hrd_Intero_threshold']
+xnew = np.linspace(min(x),max(x),100)
+reg = TheilSenRegressor().fit(x.values.reshape(-1,1),y.values)
+ynew = reg.predict(xnew.reshape(-1,1))
+fig,ax=plt.subplots()
+ax.scatter(x,y)
+ax.plot(xnew,ynew)
+ax.set_xlabel('Exteroceptive threshold')
+ax.set_ylabel('Interoceptive threshold')
+ax.set_title(f'Theil-Sen regression: y = {reg.coef_[0]:.2f}x + {reg.intercept_:.2f}')
+t['hrd_Intero_threshold_adj'] = np.nan
+t.loc[t.use_hrd,'hrd_Intero_threshold_adj'] = reg.predict(t.loc[t.use_hrd,'hrd_Extero_threshold'].values.reshape(-1,1))
 
 scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_RR_std')
 scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_RMSSD')
 scatter(PT,PT,'hrd_Intero_bpm_mean','meds_chlor')
+scatter(PT,PT,'hrd_Intero_RR_std','meds_chlor')
+scatter(PT,PT,'hrd_Intero_RMSSD','meds_chlor')
 scatter('hc',PT,'hrd_Intero_threshold','hrd_Extero_threshold')
 scatter('hc',PT,'hrd_Intero_threshold_abs','hrd_Extero_threshold_abs')
 
 scatter('hc',PT,'hrd_Intero_threshold_abs','hrd_Intero_slope')
+scatter('hc',PT,'hrd_Extero_threshold_abs','hrd_Extero_slope')
 scatter('hc',PT,'hrd_Extero_threshold_abs','hrd_Extero_slope')
 
 scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Extero_threshold_abs')
@@ -530,7 +557,7 @@ for i in range(len(t)):
         for cond in ['Intero','Extero']:
             data=data.append({'subject':t.at[i,'record_id'],'hrd_threshold_abs':t.at[i,f'hrd_{cond}_threshold_abs'],'hrd_threshold':t.at[i,f'hrd_{cond}_threshold'],'hrd_slope':t.at[i,f'hrd_{cond}_slope'], 'group':group,'cond':cond},ignore_index=True)
 
-"""
+
 model = ols('hrd_threshold_abs ~ group + cond + group:cond', data=data).fit()
 anova_table = sm.stats.anova_lm(model, typ=2)
 print('hrd_threshold_abs ~ group + cond + group:cond')
@@ -540,7 +567,7 @@ model = ols('hrd_slope ~ group + cond + group:cond', data=data).fit()
 anova_table = sm.stats.anova_lm(model, typ=2)
 print('hrd_slope ~ group + cond + group:cond')
 print(anova_table) #No significant interaction 
-"""
+
 
 #Is it the same subjects having high intero and extero thresholds? Plot Intero and Extero thresholds for each subject with a line connecting them
 """
@@ -553,14 +580,24 @@ fig.tight_layout()
 sns.despine()
 """
 
-def pairplot(vars,height=1.5):
+def pairplot(vars,height=1.5,include_these=None):
     #Scatterplot of all pairwise variables in vars, and kernel density plots for each variable on the diagonal
+    if include_these is None:
+        include_these=t.iloc[:,0].copy()
+        include_these[:]=True #array of all Trues to include all rows
     sns.set_context('paper')
-    sns.pairplot(t.loc[t.use_hrd & (t.group!='') & not_outliers,:],hue='group03',corner=True,vars=vars,height=height)
+    sns.pairplot(t.loc[t.use_hrd & include_these & (t.group03!='') & not_outliers,:],hue='group03',corner=True,vars=vars,height=height,palette=colors)
     sns.despine()
 
 #pairplot(['hrd_Intero_bpm_mean','hrd_Intero_RR_std'])
 
-pairplot(['fsiq2','sofas','cgi_s','panss_P','panss_N','hrd_Intero_bpm_mean','hrd_Intero_RR_std','hrd_Intero_RMSSD'],height=1)
+#pairplot(['fsiq2','sofas','cgi_s','panss_P','panss_N','hrd_Intero_bpm_mean','hrd_Intero_RR_std','hrd_Intero_RMSSD'],height=1)
+
+scatter('hc',PT,'hrd_Intero_threshold_abs','cface_amp_max_mean',include_these=t.use_cface & t.cface_latencies_validperc_ha)
+scatter('hc',PT,'hrd_Intero_slope','cface_amp_max_mean',include_these=t.use_cface & t.cface_latencies_validperc_ha)
+scatter('hc',PT,'hrd_Intero_threshold_abs','cface_latencies_mean_ha',include_these=t.use_cface & t.cface_latencies_validperc_ha)
+scatter('hc',PT,'hrd_Intero_slope','cface_latencies_mean_ha',include_these=t.use_cface & t.cface_latencies_validperc_ha)
+pairplot(['hrd_Intero_threshold_abs','hrd_Extero_threshold_abs','hrd_Intero_slope','cface_amp_max_mean','cface_latencies_mean_ha','cface_latencies_mean_an'],include_these=t.use_cface)
+
 
 plt.show(block=False)

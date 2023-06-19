@@ -192,48 +192,47 @@ def get_outcomes(subject):
     return {'amp_max':ha_AU_trial_ha_max, 'amp_range':ha_AU_trial_ha_range,'mean_ts': aus_trial_mean,'mean_ts_pca':aus_trial_pca_mean, 'other_metrics':other_metrics}
     #return ha_AU_trial_ha_max
 
+load_table=False
+if load_table:
+    t = pd.read_csv(f'{temp_folder}\\outcomes_cface.csv')
+else:
+    t=acommonfuncs.add_columns(t,['cface_mean_ts_ha_pca0','cface_mean_ts_an_pca0','cface_mean_ts_ha_au12'])
+    t=acommonfuncs.add_columns(t,['cface_latencies_ha','cface_durations_ha','cface_latencies_an','cface_durations_an'])
+    for i in range(t.shape[0]):
+        if t.use_cface[i]:
+            outcomes = get_outcomes(subs[i])
+            #t.at[i,'cface_amp_max_mean'] = np.mean(outcomes['amp_max'])
+            #t.at[i,'cface_amp_range_mean'] = npt.co.mean(outcomes['amp_range'])
+            #t.at[i,'cface_amp_max_slope'] = acface_utils.get_slope(outcomes['amp_max'])
+            if type(outcomes['mean_ts_pca'])==dict: #exclude nans from poor webcam acquisitions
+                t.at[i,'cface_goodwebcam']=True #whether webcam acquisition was good enough to use
 
-def add_columns(colnames,dtype=object,value=np.nan):
-    for colname in colnames:
-        t[colname]=value
-        t[colname]=t[colname].astype(dtype)
-add_columns(['cface_mean_ts_ha_pca0','cface_mean_ts_an_pca0','cface_mean_ts_ha_au12'])
-add_columns(['cface_latencies_ha','cface_durations_ha','cface_latencies_an','cface_durations_an'])
+                t.at[i,'cface_amp_max_mean'] = np.mean(outcomes['amp_max'])
+                t.at[i,'cface_amp_range_mean'] = np.mean(outcomes['amp_range'])
+                t.at[i,'cface_amp_max_slope'] = acface_utils.get_slope(outcomes['amp_max'])
 
-for i in range(t.shape[0]):
-    if t.use_cface[i]:
-        outcomes = get_outcomes(subs[i])
-        #t.at[i,'cface_amp_max_mean'] = np.mean(outcomes['amp_max'])
-        #t.at[i,'cface_amp_range_mean'] = npt.co.mean(outcomes['amp_range'])
-        #t.at[i,'cface_amp_max_slope'] = acface_utils.get_slope(outcomes['amp_max'])
-        if type(outcomes['mean_ts_pca'])==dict: #exclude nans from poor webcam acquisitions
-            t.at[i,'cface_goodwebcam']=True #whether webcam acquisition was good enough to use
-
-            t.at[i,'cface_amp_max_mean'] = np.mean(outcomes['amp_max'])
-            t.at[i,'cface_amp_range_mean'] = np.mean(outcomes['amp_range'])
-            t.at[i,'cface_amp_max_slope'] = acface_utils.get_slope(outcomes['amp_max'])
-
-            t.at[i,'cface_mean_ts_ha_pca0'] = outcomes['mean_ts_pca']['ha'][:,0]
-            t.at[i,'cface_mean_ts_an_pca0'] = outcomes['mean_ts_pca']['an'][:,0]
-            t.at[i,'cface_mean_ts_ha_au12'] = outcomes['mean_ts']['ha'][:,ha_AU_index]
-            
-            r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(outcomes['other_metrics']['ha'],n_trialsperemotion)
-            t.at[i,'cface_latencies_validperc_ha'] = r_validperc
-            t.at[i,'cface_latencies_ha'] = r_latencies
-            t.at[i,'cface_latencies_mean_ha'] = np.mean(r_latencies)
-            t.at[i,'cface_durations_ha'] = r_durations
-            t.at[i,'cface_durations_mean_ha'] = np.mean(r_durations)
-            t.at[i,'cface_maxgrads_mean_ha'] = np.mean(r_maxgrads)
-            r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(outcomes['other_metrics']['an'],n_trialsperemotion)
-            t.at[i,'cface_latencies_validperc_an'] = r_validperc
-            t.at[i,'cface_latencies_an'] = r_latencies
-            t.at[i,'cface_latencies_mean_an'] = np.mean(r_latencies)
-            t.at[i,'cface_durations_an'] = r_durations
-            t.at[i,'cface_durations_mean_an'] = np.mean(r_durations)
-            t.at[i,'cface_maxgrads_mean_an'] = np.mean(r_maxgrads)
-            #acface_utils.plot_this_au_trial(outcomes['other_metrics']['an'],'an - comp0',times_trial_regular,relevant_timestamps,relevant_labels,midpoint_timestamps,plot_relevant_timestamps=False,results=outcomes['other_metrics']['an'])          
-        else:
-            t.at[i,'cface_goodwebcam']=False
+                t.at[i,'cface_mean_ts_ha_pca0'] = outcomes['mean_ts_pca']['ha'][:,0]
+                t.at[i,'cface_mean_ts_an_pca0'] = outcomes['mean_ts_pca']['an'][:,0]
+                t.at[i,'cface_mean_ts_ha_au12'] = outcomes['mean_ts']['ha'][:,ha_AU_index]
+                
+                r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(outcomes['other_metrics']['ha'],n_trialsperemotion)
+                t.at[i,'cface_latencies_validperc_ha'] = r_validperc
+                t.at[i,'cface_latencies_ha'] = r_latencies
+                t.at[i,'cface_latencies_mean_ha'] = np.mean(r_latencies)
+                t.at[i,'cface_durations_ha'] = r_durations
+                t.at[i,'cface_durations_mean_ha'] = np.mean(r_durations)
+                t.at[i,'cface_maxgrads_mean_ha'] = np.mean(r_maxgrads)
+                r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(outcomes['other_metrics']['an'],n_trialsperemotion)
+                t.at[i,'cface_latencies_validperc_an'] = r_validperc
+                t.at[i,'cface_latencies_an'] = r_latencies
+                t.at[i,'cface_latencies_mean_an'] = np.mean(r_latencies)
+                t.at[i,'cface_durations_an'] = r_durations
+                t.at[i,'cface_durations_mean_an'] = np.mean(r_durations)
+                t.at[i,'cface_maxgrads_mean_an'] = np.mean(r_maxgrads)
+                #acface_utils.plot_this_au_trial(outcomes['other_metrics']['an'],'an - comp0',times_trial_regular,relevant_timestamps,relevant_labels,midpoint_timestamps,plot_relevant_timestamps=False,results=outcomes['other_metrics']['an'])          
+            else:
+                t.at[i,'cface_goodwebcam']=False
+        t.to_csv(f'{temp_folder}\\outcomes_cface.csv')
 
 
 import seaborn as sns

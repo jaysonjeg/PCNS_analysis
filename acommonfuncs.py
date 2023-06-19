@@ -19,6 +19,20 @@ class clock():
         runtime_sec = runtime.total_seconds()
         return runtime_sec,'{:.1f} sec.'.format(runtime_sec)
 
+def add_columns(t,colnames,dtype=object,value=np.nan):
+    for colname in colnames:
+        t[colname]=value
+        t[colname]=t[colname].astype(dtype)
+    return t
+
+def add_table(t,csv_file):
+    #Open csv_file as a Pandas dataframe and name it other_t. Combine other_t with dataframe t. For any columns in other_t that are not in t, add them to t. This function assumes that any columns common to t and other_t are already the same.
+    other_t = pd.read_csv(f'{temp_folder}\\{csv_file}')
+    for col in other_t.columns:
+        if col not in t.columns:
+            t[col] = other_t[col]
+    return t
+
 def get_beh_data(taskname,subject,suffix,use_MRI_task,header='infer'):
     """
     Get behavioural data from *out.csv in 'beh' folder
