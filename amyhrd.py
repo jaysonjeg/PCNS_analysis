@@ -37,6 +37,11 @@ robust=True #robust statistical analyses, or otherwise usual analyses (pearson r
 PT = 'sz' #patient group: 'cc', 'sz'
 print(f'Analyses below compare hc with {PT}')
 
+intero_adjust_method = 'regress_extero' #'regress_extero' or 'add7'
+print(f'Adjusting interoceptive thresholds by {intero_adjust_method}')
+
+outlier_method = 'zscore' #'zscore' or 'madmedianrule'
+outlier_cutoff = 3 #z-score for outlier cutoff. Could use MAD-median method in pingoin instead
 
 #outcomes,durations = get_outcomes('015',True) #015 has dramatic threshold, 073 weird confidences
 #assert(0)
@@ -121,13 +126,28 @@ def scatter(group1,group2,column_name1,column_name2,robust=robust,include_these=
     fig.tight_layout()
 
 has_sdt = ~t.hrd_Intero_dprime.isnull()
-Extero_zscores = zscore(t.hrd_Extero_threshold,nan_policy='omit')
-Intero_zscores = zscore(t.hrd_Intero_threshold,nan_policy='omit')
-outlier_cutoff = 3 #could use MAD-median method in pingoin instead
-not_outliers = (np.abs(Extero_zscores)<outlier_cutoff) & (np.abs(Intero_zscores)<outlier_cutoff) #define outliers as being more than 3 standard deviations from the mean for exteroceptive or interoceptive thresholds
+
+
+if outlier_method=='zscore':
+    Extero_zscores = zscore(t.hrd_Extero_threshold,nan_policy='omit')
+    Intero_zscores = zscore(t.hrd_Intero_threshold,nan_policy='omit')
+    HR_zscores = zscore(t.hrd_Intero_bpm_mean,nan_policy='omit')
+    not_outliers = (np.abs(Extero_zscores)<outlier_cutoff) & (np.abs(Intero_zscores)<outlier_cutoff) #define outliers as being more than 3 standard deviations from the mean for exteroceptive or interoceptive thresholds
+elif outlier_method=='madmedianrule':
+    Extero_out=pg.madmedianrule(t.loc[t.use_hrd & (hc|eval(PT)),'hrd_Extero_threshold']) 
+    Intero_out=pg.madmedianrule(t.loc[t.use_hrd & (hc|eval(PT)),'hrd_Intero_threshold']) 
+    HR_out=pg.madmedianrule(t.loc[t.use_hrd & (hc|eval(PT)),'hrd_Intero_bpm_mean']) 
+    madmedian_outliers = Extero_out | Intero_out | HR_out
+    this_df = t.loc[t.use_hrd & (hc|eval(PT)),'record_id']
+    madmedian_outliers_record_ids = this_df[madmedian_outliers].values
+    not_outliers = np.array([True]*len(t))
+    for record_id in madmedian_outliers_record_ids:
+        index = this_df[this_df==record_id].index[0] #index of this record_id in t
+        not_outliers[index]=False
+
 t.use_hrd = t.use_hrd & not_outliers #to exclude outliers from analyses
 
-#Use robust regression to adjust interoceptive thresholds for exteroceptive thresholds
+#Use robust regression to predict interoceptive thresholds from exteroceptive thresholds
 x = t.loc[t.use_hrd & not_outliers,'hrd_Extero_threshold']
 y = t.loc[t.use_hrd & not_outliers,'hrd_Intero_threshold']
 xnew = np.linspace(min(x),max(x),100)
@@ -139,11 +159,13 @@ ax.plot(xnew,ynew)
 ax.set_xlabel('Exteroceptive threshold')
 ax.set_ylabel('Interoceptive threshold')
 ax.set_title(f'Theil-Sen regression: y = {reg.coef_[0]:.2f}x + {reg.intercept_:.2f}')
-t['hrd_Intero_threshold_adj'] = np.nan
-t.loc[t.use_hrd,'hrd_Intero_threshold_adj'] = t.loc[t.use_hrd,'hrd_Intero_threshold'] - reg.predict(t.loc[t.use_hrd,'hrd_Extero_threshold'].values.reshape(-1,1))
 
-t['hrd_Intero_threshold_adj'] = t['hrd_Intero_threshold'] + 7 #a simpler way to adjust
 
+if intero_adjust_method=='regress_extero':
+    t['hrd_Intero_threshold_adj'] = np.nan
+    t.loc[t.use_hrd,'hrd_Intero_threshold_adj'] = t.loc[t.use_hrd,'hrd_Intero_threshold'] - reg.predict(t.loc[t.use_hrd,'hrd_Extero_threshold'].values.reshape(-1,1))
+elif intero_adjust_method=='add7':
+    t['hrd_Intero_threshold_adj'] = t['hrd_Intero_threshold'] + 7 #a simpler way to adjust
 
 #Absolute value of thresholds
 t['hrd_Intero_threshold_abs'] = np.abs(t.hrd_Intero_threshold)
@@ -211,35 +233,18 @@ for cond in ['Intero','Extero']:
     #compare('hc',PT,f'hrd_{cond}_dprime',has_sdt)
     #compare('hc',PT,f'hrd_{cond}_criterion',has_sdt)
     compare('hc',PT,f'hrd_{cond}_threshold',to_plot_compare=to_plot)
-    compare('hc',PT,f'hrd_{cond}_threshold_abs')
-    """
+    compare('hc',PT,f'hrd_{cond}_threshold_abs')  
     if cond=='Intero':
         compare('hc',PT,f'hrd_{cond}_threshold_adj')
         compare('hc',PT,f'hrd_{cond}_threshold_adj_abs')
-    """
     compare('hc',PT,f'hrd_{cond}_slope',to_plot_compare=to_plot)
-
-#Do Intero/Extero and group (HC/CC) interact to determine |threshold|?. To answer this first concatenate the intero and extero thresholds abs columns vertically to a new dataframe
-data = pd.DataFrame(columns=['subject','hrd_threshold_abs','hrd_threshold','hrd_slope','group','cond'])
-for i in range(len(t)):
-    if t.loc[i,'use_hrd'] & (hc|eval(PT))[i]:
-        if hc[i]: group='hc'
-        elif eval(PT)[i]: group=PT
-        for cond in ['Intero','Extero']:
-            dictionary = {'subject':t.at[i,'record_id'],'hrd_threshold_abs':t.at[i,f'hrd_{cond}_threshold_abs'],'hrd_threshold':t.at[i,f'hrd_{cond}_threshold'],'hrd_slope':t.at[i,f'hrd_{cond}_slope'], 'group':group,'cond':cond}
-            """
-            if cond=='Intero':
-                dictionary = {'subject':t.at[i,'record_id'],'hrd_threshold_abs':t.at[i,f'hrd_{cond}_threshold_adj_abs'],'hrd_threshold':t.at[i,f'hrd_{cond}_threshold_adj'],'hrd_slope':t.at[i,f'hrd_{cond}_slope'], 'group':group,'cond':cond}
-            """
-            data=data.append(dictionary,ignore_index=True)
-
 
 t['hrd_Extero_threshold_adj'] = t['hrd_Extero_threshold'] #just a copy
 t['hrd_Extero_threshold_adj_abs'] = t['hrd_Extero_threshold_abs'] #just a copy
 
-
+#Make new table t2, where interoceptive and exteroceptive thresholds are in the same column, and there is a new column 'cond' which is either 'Intero' or 'Extero'
 vars = ['hrd_threshold','hrd_threshold_abs','hrd_slope','hrd_threshold_adj','hrd_threshold_adj_abs']
-data = pd.DataFrame(columns = list(t.columns) + vars + ['cond'])
+t2 = pd.DataFrame(columns = list(t.columns) + vars + ['cond'])
 for i in range(len(t)):
     if t.loc[i,'use_hrd'] & (hc|eval(PT))[i]:
         if hc[i]: group='hc'
@@ -252,55 +257,34 @@ for i in range(len(t)):
             for var in vars:
                 old_column_name = f'{var[0:3]}_{cond}_{var[4:]}'
                 row[var] = t.at[i,old_column_name]
-            data = data.append(row,ignore_index=True)
+            t2 = t2.append(row,ignore_index=True)
 
 
+#Effect disappears in linear model when including HR
+print(sm.stats.anova_lm(smf.ols('hrd_Intero_threshold_adj_abs ~ group03 + fsiq2 + hrd_Intero_bpm_mean', data=t.loc[t.use_hrd & (hc|eval(PT)),:]).fit(), typ=2))
 
-def anova(string,columns,method='ols',return_data=False):
-    data = pd.DataFrame(columns=columns)
-    for i in range(len(t)):
-        if t.loc[i,'use_hrd'] & (hc|eval(PT))[i]:
-            if hc[i]: group='hc'
-            elif eval(PT)[i]: group=PT    
-            for cond in ['Intero','Extero']:
-                dictionary = {'subject':t.at[i,'record_id'],'group':group,'cond':cond}
-                for column in columns:
-                    dictionary[column]=t.at[i,f'{column[0:3]}_{cond}_{column[4:]}']    
-                data=data.append(dictionary,ignore_index=True)
-    if return_data: return data
-    print(string)
-    if method=='ols':
-        model = smf.ols(string, data=data).fit()
-        anova_table = sm.stats.anova_lm(model, typ=2)
-        print(anova_table) #No significant interaction    
-    elif method=='lad': #least absolute deviation (robust to outliers)
-        model=smf.quantreg(string,data=data).fit(q=0.5)
-        print(model.summary())
+#But HR doesn't account for interoceptive thresholds in controls
+scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj_abs')
+scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj')
 
-data=anova('hrd_threshold_abs ~ group + cond + group:cond', ['hrd_threshold_abs'],return_data=True)
-r=pg.mixed_anova(data=data, dv='hrd_threshold_abs', within='cond', subject='subject', between='group') #sig
+#pingoin's mixed_anova
+print(pg.mixed_anova(data=t2, dv='hrd_threshold_abs', within='cond', subject='record_id', between='group03')) #sig
+print(pg.mixed_anova(data=t2, dv='hrd_threshold_adj_abs', within='cond', subject='record_id', between='group03',correction=True)) #not sig
 
-data=anova('hrd_threshold_adj_abs ~ group + cond + group:cond', ['hrd_threshold_adj_abs'],return_data=True)
-r=pg.mixed_anova(data=data, dv='hrd_threshold_adj_abs', within='cond', subject='subject', between='group') #not sig
+"""
+#As above but ANOVAs
+print(sm.stats.anova_lm(smf.ols('hrd_threshold_adj_abs ~ group03 + cond + group03:cond', data=t2).fit(), typ=2))
+print(sm.stats.anova_lm(smf.ols('hrd_threshold_adj_abs ~ hrd_slope + cond + hrd_slope:cond', data=t2).fit(), typ=2)) 
+print(sm.stats.anova_lm(smf.ols("hrd_threshold_adj_abs ~ hrd_slope + cond + group03 + hrd_slope*cond + group03*cond + group03*hrd_slope + group03*cond*hrd_slope", data=t2).fit(), typ=2)) #3-way
+print(sm.stats.anova_lm(smf.ols('hrd_slope ~ group03 + cond + group03:cond', data=t2).fit(), typ=2))
 
-#Within-subjects (repeated) factors are 'cond'. Between-subject factors are group
-
-anova('hrd_threshold_abs ~ group + cond + group:cond', ['hrd_threshold_abs']) #try with mixed effects
-anova('hrd_threshold_adj_abs ~ group + cond + group:cond', ['hrd_threshold_adj_abs'])
-
-anova('hrd_slope ~ group + cond + group:cond', ['hrd_slope'])
-
-anova('hrd_threshold_abs ~ hrd_slope + cond + hrd_slope:cond', ['hrd_threshold_abs','hrd_slope']) 
-anova('hrd_threshold_adj_abs ~ hrd_slope + cond + hrd_slope:cond', ['hrd_threshold_adj_abs','hrd_slope']) #try with mixed effects + ANCOVA
-
-anova("hrd_threshold_adj_abs ~ hrd_slope + cond + group + hrd_slope*cond + group*cond + group*hrd_slope + group*cond*hrd_slope", ['hrd_threshold_adj_abs','hrd_slope']) #3-way
-
-
-
-from statsmodels.stats.anova import AnovaRM
-#perform the repeated measures ANOVA
-print(AnovaRM(data=df, depvar='response', subject='patient', within=['drug']).fit())
-
+#As above, but using random intercepts for subject
+# hrd_threshold_adj_abs ~ cond + group + group*cond + (1|record_id)
+mdf=smf.mixedlm("hrd_threshold_adj_abs ~ cond+group03+cond*group03", t2, groups=t2["record_id"]).fit().summary()
+mdf=smf.mixedlm('hrd_threshold_adj_abs ~ hrd_slope+cond+hrd_slope*cond',t2,groups=t2['record_id']).fit().summary()
+mdf=smf.mixedlm("hrd_threshold_adj_abs ~ cond+group03+hrd_slope+cond*group03+cond*hrd_slope+group03*hrd_slope+cond*group03*hrd_slope", t2, groups=t2["record_id"]).fit().summary()
+mdf=smf.mixedlm('hrd_slope ~ group03+cond+group03:cond',t2,groups=t2['record_id']).fit().summary()
+"""
 
 #Is it the same subjects having high intero and extero thresholds? Plot Intero and Extero thresholds for each subject with a line connecting them
 """
