@@ -66,7 +66,6 @@ for i in range(len(t)):
     if hc[i]: t.at[i,'group03'] = 'hc'
     elif eval(PT)[i]: t.at[i,'group03'] = PT
 
-
 """
 r: Outer level keys are 'Intero', 'Extero'. Inner level keys are quality measures (Q_wrong_decisions_took_longer, Q_wrong_decisions_lower_confidence, Q_confidence_occurence_max, Q_HR_outlier_perc), SDT measures (dprime, criterion), psychophysics measures (threshold, slope), HR measures (bpm_mean, bpm_std) (HR not present for Extero condition)
 """
@@ -259,32 +258,37 @@ for i in range(len(t)):
                 row[var] = t.at[i,old_column_name]
             t2 = t2.append(row,ignore_index=True)
 
+if intero_adjust_method=='regress_extero':
+    #Effect disappears in linear model when including HR
+    print(sm.stats.anova_lm(smf.ols('hrd_Intero_threshold_adj_abs ~ group03 + hrd_Intero_bpm_mean', data=t.loc[t.use_hrd & (hc|eval(PT)),:]).fit(), typ=2))
 
-#Effect disappears in linear model when including HR
-print(sm.stats.anova_lm(smf.ols('hrd_Intero_threshold_adj_abs ~ group03 + fsiq2 + hrd_Intero_bpm_mean', data=t.loc[t.use_hrd & (hc|eval(PT)),:]).fit(), typ=2))
+    #But HR doesn't account for interoceptive thresholds in controls
+    scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj_abs')
+    scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj')
 
-#But HR doesn't account for interoceptive thresholds in controls
-scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj_abs')
-scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj')
+elif intero_adjust_method == 'add7':
+    #pingoin's mixed_anova
+    print(pg.mixed_anova(data=t2, dv='hrd_threshold_abs', within='cond', subject='record_id', between='group03')) #sig
+    print(pg.mixed_anova(data=t2, dv='hrd_threshold_adj_abs', within='cond', subject='record_id', between='group03',correction=True)) #not sig
 
-#pingoin's mixed_anova
-print(pg.mixed_anova(data=t2, dv='hrd_threshold_abs', within='cond', subject='record_id', between='group03')) #sig
-print(pg.mixed_anova(data=t2, dv='hrd_threshold_adj_abs', within='cond', subject='record_id', between='group03',correction=True)) #not sig
+    #As above but ANOVAs
 
-"""
-#As above but ANOVAs
-print(sm.stats.anova_lm(smf.ols('hrd_threshold_adj_abs ~ group03 + cond + group03:cond', data=t2).fit(), typ=2))
-print(sm.stats.anova_lm(smf.ols('hrd_threshold_adj_abs ~ hrd_slope + cond + hrd_slope:cond', data=t2).fit(), typ=2)) 
-print(sm.stats.anova_lm(smf.ols("hrd_threshold_adj_abs ~ hrd_slope + cond + group03 + hrd_slope*cond + group03*cond + group03*hrd_slope + group03*cond*hrd_slope", data=t2).fit(), typ=2)) #3-way
-print(sm.stats.anova_lm(smf.ols('hrd_slope ~ group03 + cond + group03:cond', data=t2).fit(), typ=2))
+    print(sm.stats.anova_lm(smf.ols('hrd_Intero_threshold_adj_abs ~ group03 + hrd_Intero_bpm_mean', data=t.loc[t.use_hrd & (hc|eval(PT)),:]).fit(), typ=2))
 
-#As above, but using random intercepts for subject
-# hrd_threshold_adj_abs ~ cond + group + group*cond + (1|record_id)
-mdf=smf.mixedlm("hrd_threshold_adj_abs ~ cond+group03+cond*group03", t2, groups=t2["record_id"]).fit().summary()
-mdf=smf.mixedlm('hrd_threshold_adj_abs ~ hrd_slope+cond+hrd_slope*cond',t2,groups=t2['record_id']).fit().summary()
-mdf=smf.mixedlm("hrd_threshold_adj_abs ~ cond+group03+hrd_slope+cond*group03+cond*hrd_slope+group03*hrd_slope+cond*group03*hrd_slope", t2, groups=t2["record_id"]).fit().summary()
-mdf=smf.mixedlm('hrd_slope ~ group03+cond+group03:cond',t2,groups=t2['record_id']).fit().summary()
-"""
+    print(sm.stats.anova_lm(smf.ols('hrd_threshold_adj_abs ~ group03 + cond + group03:cond', data=t2).fit(), typ=2)) #sig with sz, adj
+    print(sm.stats.anova_lm(smf.ols('hrd_threshold_adj_abs ~ hrd_slope + cond + hrd_slope:cond', data=t2).fit(), typ=2)) 
+    print(sm.stats.anova_lm(smf.ols("hrd_threshold_adj_abs ~ hrd_slope + cond + group03 + hrd_slope*cond + group03*cond + group03*hrd_slope + group03*cond*hrd_slope", data=t2).fit(), typ=2)) #3-way. sig with adj
+    print(sm.stats.anova_lm(smf.ols('hrd_slope ~ group03 + cond + group03:cond', data=t2).fit(), typ=2))
+
+    #As above, but using random intercepts for subject
+    # hrd_threshold_adj_abs ~ cond + group + group*cond + (1|record_id)
+    mdf=smf.mixedlm("hrd_threshold_adj_abs ~ cond+group03+cond*group03", t2, groups=t2["record_id"]).fit().summary()
+    mdf=smf.mixedlm("hrd_threshold_adj_abs ~ cond+group03+cond*group03+hrd_Intero_bpm_mean", t2, groups=t2["record_id"],re_formula="~cond").fit().summary()
+
+    mdf=smf.mixedlm('hrd_threshold_adj_abs ~ hrd_slope+cond+hrd_slope*cond',t2,groups=t2['record_id']).fit().summary()
+    mdf=smf.mixedlm("hrd_threshold_adj_abs ~ cond+group03+hrd_slope+cond*group03+cond*hrd_slope+group03*hrd_slope+cond*group03*hrd_slope", t2, groups=t2["record_id"]).fit().summary()
+    mdf=smf.mixedlm('hrd_slope ~ group03+cond+group03:cond',t2,groups=t2['record_id']).fit().summary()
+
 
 #Is it the same subjects having high intero and extero thresholds? Plot Intero and Extero thresholds for each subject with a line connecting them
 """

@@ -103,16 +103,18 @@ def regress(x,y):
     SSE = sum(residuals**2)
     return SSE,reg.coef_,reg.intercept_
 
-
 N=1000 #number of time points
 x = np.linspace(0,8,N)
 
-lengths = [5,10,20,25,30,35,40,50,60,70,90,120] #characteristic lengths to try for exponential decay smoothing
-max_lag=250 #max lag for variogram
+plot_random=True #fourier phase randomization
+do_vario=False
+lengths = [1/8,1/4,1/2,1,2,3,5,10,20,25,30,35,40,50,60,70,90] #characteristic lengths to try for exponential decay smoothing
+max_lag=1000 #max lag for variogram
+n_iters = 10
 
 #y = makebump(x,width=0.6)
-#y = makesquare(x,1,2,5) + makesquare(x,2.5,5,1) + makesquare(x,7,7.5,7)
-y = smoothed_noise(x,noise_level=0.1,window=0.3)
+y = makesquare(x,1,2,5) + makesquare(x,2.5,5,1) + makesquare(x,7,7.5,7)
+#y = smoothed_noise(x,noise_level=0.1,window=0.5)
 
 y = (y-np.mean(y))/np.std(y)
 
@@ -129,77 +131,110 @@ y2s_remhigh,corrs_remhigh = remove_components(y,yf,ns,'high')
 y2s_remlow,corrs_remlow = remove_components(y,yf,ns,'low')
 y_corrs = getcorrs(y,yf,ns)  #correlation with original function y, when reconstructed with increasing numbers of its own fourier components (yf) (starting from low-freq)
 
-sample_kernel = expdecay(10)
-y_vario = variogram(y,max_lag=max_lag)
-y_shuff = shuffle(y)
-y_nulls = [smooth_exp(y_shuff,length=i) for i in lengths]
-y_nulls_varios = [variogram(i,max_lag=max_lag) for i in y_nulls]
-results = [regress(i,y_vario) for i in y_nulls_varios]
-SSEs,coefs,intercepts = zip(*results)
-coefs = [i[0] for i in coefs]
-y_nulls_varios_scaled = [y_nulls_varios[i]*coefs[i]+intercepts[i] for i in range(len(lengths))]
-y_nulls_scaled = [ np.sqrt(np.abs(coefs[i])) * y_nulls[i] + np.sqrt(np.abs(intercepts[i])) * np.random.normal(loc=0,scale=1,size=1000)  for i in range(len(lengths)) ]
-y_nulls_scaled_varios = [variogram(i,max_lag=max_lag) for i in y_nulls_scaled] #to check if actual variograms of the rescaled nulls is close to what it should be
-best_index = np.argmin(SSEs)
-ynull = y_nulls_scaled[best_index]
-
-ynullf = np.fft.rfft(ynull)
-ynullpower=np.abs(ynullf)**2
-ynullpower_cdf = cdf(ynullpower)
-ynull_corrs = getcorrs(ynull,ynullf,ns)
-ynull_vario = y_nulls_scaled_varios[best_index]
-
-#Plots of surrogate production using variogram
-fig,axs=plt.subplots(nrows=3,ncols=len(lengths))
-for i in range(len(lengths)):
-    ax=axs[0,i]
-    ax.plot(y_vario,'b',label='orig')
-    ax.plot(y_nulls_varios_scaled[i],'r',label='null')
-    ax.set_ylabel('variance')
-    ax.set_xlabel('dist')
-    if i==best_index:
-        ax.set_title(f'k={lengths[i]} (best fit)')
-    else:
-        ax.set_title(f'k={lengths[i]}')
-
-    ax = axs[1,i]
-    ax.plot(y,'b',label='orig',alpha=0.3)
-    ax.plot(y_nulls_scaled[i],'r',label='null',alpha=0.3)
-
-    ax = axs[2,i]
-    ax.plot(y_vario,'b',label='orig')
-    ax.plot(y_nulls_scaled_varios[i],'r',label='null')
-    ax.set_ylabel('variance')
-    ax.set_xlabel('dist')
-fig.suptitle('Row 1: new varios. Row 2: new time series. Row 3: actual vario of rescaled nulls')
-fig.tight_layout()
-
-
 y_vario_total = variogram(y,max_lag=1000)
-ynull_vario_total = variogram(ynull,max_lag=1000)
 
-cmaps = {'orig':'blue','null':'red'}
+if do_vario:
+    y_vario = variogram(y,max_lag=max_lag)
+    sample_kernel = expdecay(10)
+    y_shuff = shuffle(y)
+
+    y_current = y_shuff
+    for j in range(n_iters):
+        y_nulls = [smooth_exp(y_current,length=i) for i in lengths]
+        y_nulls_varios = [variogram(i,max_lag=max_lag) for i in y_nulls]
+        results = [regress(i,y_vario) for i in y_nulls_varios]
+        SSEs,coefs,intercepts = zip(*results)
+        coefs = [i[0] for i in coefs]
+        y_nulls_varios_scaled = [y_nulls_varios[i]*coefs[i]+intercepts[i] for i in range(len(lengths))]
+        y_nulls_scaled = [ np.sqrt(np.abs(coefs[i])) * y_nulls[i] + np.sqrt(np.abs(intercepts[i])) * np.random.normal(loc=0,scale=1,size=1000)  for i in range(len(lengths)) ]
+
+        best_index = np.argmin(SSEs)
+        print(f'Iteration {j}: best length is {lengths[best_index]}')
+        ynull = y_nulls_scaled[best_index]
+        y_current = ynull
+
+    y_nulls_scaled_varios = [variogram(i,max_lag=max_lag) for i in y_nulls_scaled] #to check if actual variograms of the rescaled nulls is close to what it should be
+
+    ynullf = np.fft.rfft(ynull)
+    ynullpower=np.abs(ynullf)**2
+    ynullpower_cdf = cdf(ynullpower)
+    ynull_corrs = getcorrs(ynull,ynullf,ns)
+    ynull_vario = y_nulls_scaled_varios[best_index]
+
+    #Plots of surrogate production using variogram
+    fig,axs=plt.subplots(nrows=3,ncols=len(lengths))
+    for i in range(len(lengths)):
+        ax=axs[0,i]
+        ax.plot(y_vario,'b',label='orig')
+        ax.plot(y_nulls_varios_scaled[i],'r',label='null')
+        ax.set_ylabel('variance')
+        ax.set_xlabel('dist')
+        if i==best_index:
+            ax.set_title(f'k={lengths[i]} (best fit)')
+        else:
+            ax.set_title(f'k={lengths[i]}')
+
+        ax = axs[1,i]
+        ax.plot(y,'b',label='orig',alpha=0.3)
+        ax.plot(y_nulls_scaled[i],'r',label='null',alpha=0.3)
+
+        ax = axs[2,i]
+        ax.plot(y_vario,'b',label='orig')
+        ax.plot(y_nulls_scaled_varios[i],'r',label='null')
+        ax.set_ylabel('variance')
+        ax.set_xlabel('dist')
+    fig.suptitle('Row 1: new varios. Row 2: new time series. Row 3: actual vario of rescaled nulls')
+    fig.tight_layout()
+
+    ynull_vario_total = variogram(ynull,max_lag=1000)
+
+    plot_these=['orig','null']
+else:
+    plot_these=['orig']
+    ynull_corrs,ynullpower,ynullpower_cdf,ynull_vario_total,ynull = 0,0,0,0,0
+
+funcs={'orig':y,'null':ynull}
+varios = {'orig':y_vario_total,'null':ynull_vario_total}
+cmaps = {'orig':'blue','null':'red','rand':'green'}
 all_corrs = {'orig':y_corrs,'null':ynull_corrs}
 powers = {'orig':ypower,'null':ynullpower}
 powercdfs = {'orig':ypower_cdf, 'null':ynullpower_cdf}
-varios = {'orig':y_vario_total,'null':ynull_vario_total}
 
-def plotfunc(ax,x,y):
-    ax.plot(x,y)
+
+if plot_random: 
+    random_phases = np.exp(np.random.uniform(0,np.pi,int(len(y)/2+1))*1.0j)
+    yfr = yf*random_phases
+    yr = np.fft.irfft(yfr)
+    yrf=np.fft.rfft(yr)
+    yrpower=np.abs(yrf)**2
+    yrpower_cdf = cdf(yrpower)
+    yr_corrs = getcorrs(yr,yrf,ns)
+    yr_vario_total=variogram(yr,max_lag=1000)
+    funcs['rand'] = yr
+    varios['rand'] = yr_vario_total
+    all_corrs['rand'] = yr_corrs
+    powers['rand'] = yrpower
+    powercdfs['rand'] = yrpower_cdf
+    plot_these.append('rand')
+
+
+def plotfunc(ax,x,labels):
+    for label in labels:
+        ax.plot(x,funcs[label],color=cmaps[label],label=label,alpha=0.3)
     ax.set_title('orig func')
 def plotpower(ax,freq,labels):
     for label in labels:
         power_spectrum = powers[label]
-        ax.plot(freq,power_spectrum,label=label,color=cmaps[label],alpha=0.3)
+        ax.plot(freq[1:],power_spectrum[1:],label=label,color=cmaps[label],alpha=0.3)
     ax.set_title('power spectrum')
     ax.set_yscale('log')
     ax.set_xlabel('frequency')
 def plothighlow(ax,ns,corrs_remhigh,corrs_remlow):
     ax.plot(ns,corrs_remhigh,label='rem high-freq first',color='pink')
     ax.plot(ns,corrs_remlow,label='rem low-freq first',color='black')
-    ax.legend()
+    #ax.legend()
     ax.set_xlim(left=0,right=500)
-    ax.set_xlabel(f'no of fourier comps removed (/{nfreqs})')
+    ax.set_xlabel(f'remove fourier comps (/{nfreqs})')
     ax.set_ylabel('corr with orig func')
 def plotpowercorrs(ax,labels):
     for label in labels:
@@ -214,9 +249,9 @@ def plotcorrs(ax,ns,labels):
     for label in labels:
         corrs = all_corrs[label]
         ax.scatter(ns,corrs,label=label,color=cmaps[label],alpha=0.2)
-    ax.set_xlabel(f'no of fourier comps used (/{nfreqs})')
+    ax.set_xlabel(f'no of fourier comps (/{nfreqs})')
     ax.set_ylabel('corr with orig func')
-    ax.set_xlim(left=0,right=500)
+    ax.set_xlim(left=0,right=50)
 def plotautocorr(ax,x,y):
     ax.plot(x,autocorr(y))
     ax.set_xlabel('lag')
@@ -229,17 +264,14 @@ def plotvario(ax,x,labels,max_lag=max_lag):
     ax.set_ylabel('variance')
 
 
-
 fig,axs = plt.subplots(nrows=2,ncols=4)
-plotfunc(axs[0,0],x,y)
-plotpower(axs[1,0],freq,['orig','null'])
-plotcorrs(axs[0,1],ns,['orig','null'])
+plotfunc(axs[0,0],x,plot_these)
+plotpower(axs[1,0],freq,plot_these)
+plotcorrs(axs[0,1],ns,plot_these)
 plothighlow(axs[1,1],ns,corrs_remhigh,corrs_remlow)
-plotpowercorrs(axs[0,2],['orig','null'])
-
-
+plotpowercorrs(axs[0,2],plot_these)
 plotautocorr(axs[0,3],x,y)
-plotvario(axs[1,3],x,['orig','null'],max_lag=1000)
+plotvario(axs[1,3],x,plot_these,max_lag=1000)
 fig.tight_layout()
 
 
