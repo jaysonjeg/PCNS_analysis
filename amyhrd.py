@@ -12,8 +12,8 @@ import numpy as np
 import pingouin as pg
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
-from scipy.stats import spearmanr, pearsonr, mannwhitneyu, ttest_ind, zscore
-from sklearn.linear_model import LinearRegression, TheilSenRegressor
+from scipy.stats import zscore
+from sklearn.linear_model import TheilSenRegressor
 import acommonfuncs
 from acommonvars import *
 import amyhrd_utils
@@ -27,24 +27,94 @@ import amyhrd_utils
 
 subjects_to_exclude_confidence = ['073']
 
-to_print_subject=False
-to_plot_subject=False
+to_print_subject=True
+to_plot_subject=True
 to_plot=True
 
 load_table=True
 robust=True #robust statistical analyses, or otherwise usual analyses (pearson r, t-test)
 
-PT = 'sz' #patient group: 'cc', 'sz'
+PT = 'cc' #patient group: 'cc', 'sz'
 print(f'Analyses below compare hc with {PT}')
 
-intero_adjust_method = 'regress_extero' #'regress_extero' or 'add7'
+intero_adjust_method = 'add7' #'regress_extero' or 'add7'
 print(f'Adjusting interoceptive thresholds by {intero_adjust_method}')
 
 outlier_method = 'zscore' #'zscore' or 'madmedianrule'
 outlier_cutoff = 3 #z-score for outlier cutoff. Could use MAD-median method in pingoin instead
 
-#outcomes,durations = get_outcomes('015',True) #015 has dramatic threshold, 073 weird confidences
-#assert(0)
+
+from glob import glob
+from metadPy import sdt
+from metadPy.utils import trials2counts, discreteRatings
+from metadPy.plotting import plot_confidence, plot_roc
+subject='065'
+r={'Intero':{},'Extero':{}} #stores outcome measures for this subject
+contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\HRD*")
+assert(len(contents)==1)
+resultsFolder=contents[0]
+df=pd.read_csv(glob(f"{resultsFolder}\\*final.txt")[0]) # Logs dataframe
+interoPost=np.load(glob(f"{resultsFolder}\\*Intero_posterior.npy")[0]) # History of posteriors distribution
+exteroPost=np.load(glob(f"{resultsFolder}\\*Extero_posterior.npy")[0])
+signal_df=pd.read_csv(glob(f"{resultsFolder}\\*signal.txt")[0]) # PPG signal
+signal_df['Time'] = np.arange(0, len(signal_df))/1000 # Create time vector <--- assumes 1000Hz sampling rate which is wrong. We used 100 Hz
+df_old=df
+df = df[df.RatingProvided == 1] #removing trials where no rating was provided
+this_df = df[df.Modality=='Intero']
+new_confidence, _ = discreteRatings(this_df.Confidence)  
+
+
+for i, cond in enumerate(['Intero', 'Extero']):
+    this_df = df[df.Modality == cond].copy()
+    this_df['Stimuli'] = (this_df.responseBPM > this_df.listenBPM)
+    this_df['Responses'] = (this_df.Decision == 'More')
+    hits, misses, fas, crs = sdt.scores(data=this_df)
+    if hits==0 or crs==0:
+        d, c = np.nan, np.nan
+    else:
+        hr, far = sdt.rates(data=this_df,hits=hits, misses=misses, fas=fas, crs=crs)
+        d, c = sdt.dprime(data=this_df,hit_rate=hr, fa_rate=far), sdt.criterion(data=this_df,hit_rate=hr, fa_rate=far)
+        if to_print_subject:
+            print(f'Condition: {cond} - d-prime: {d:.2f} - criterion: {c:.2f}')
+    r[cond]['dprime']=d
+    r[cond]['criterion']=c
+
+
+sns.set_context('talk')
+fig, axs = plt.subplots(2, 2, figsize=(13, 5))
+for i, cond in enumerate(['Intero', 'Extero']):
+    this_df = df[df.Modality == cond]
+    this_df = this_df[~this_df.Confidence.isnull()]
+
+    new_confidence, _ = discreteRatings(this_df.Confidence) # discretize confidence ratings into 4 bins
+    this_df['Confidence'] = new_confidence
+    this_df['Stimuli'] = (this_df.Alpha > 0).astype('int')
+    this_df['Responses'] = (this_df.Decision == 'More').astype('int')
+    nR_S1, nR_S2 = trials2counts(data=this_df)
+    plot_confidence(nR_S1, nR_S2, ax=axs[0,i])
+    axs[0,i].set_title(f'{cond} condition')
+
+
+    from metadPy.plotting import plot_roc
+    plot_roc(nR_S1, nR_S2, ax=axs[1,i])
+    print(f'roc auc for {cond} is {this_df.roc_auc(nRatings=4):.2f}')
+
+    from metadPy.mle import metad
+    this_df['Accuracy']=(this_df['Stimuli']==this_df['Responses']).astype(int) 
+    z=metad(data=this_df,nRatings=4,stimuli='Stimuli',accuracy='Accuracy',confidence='Confidence',verbose=0) #estimate meta dprime using MLE
+
+    from metadPy.bayesian import hmetad
+    model, trace = hmetad(
+    data=this_df, nRatings=4, stimuli='Stimuli',
+    accuracy='Accuracy', confidence='Confidence'
+    )
+
+plt.show(block=False)
+assert(0)
+
+
+outcomes,durations = amyhrd_utils.get_outcomes('015',to_print_subject=True,to_plot_subject=False) #015 has dramatic threshold, 073 weird confidences
+
 
 t['use_hrd'] = ((include) & (t.valid_hrdo==1)) #those subjects whose HRD data we will use
 if load_table:
@@ -59,7 +129,7 @@ else:
                     t.loc[i,f'hrd_{cond}_{j}']=outcomes[cond][j]
     t.to_csv(f'{temp_folder}\\outcomes_myhrd.csv')
 
-t=acommonfuncs.add_table(t,'outcomes_cface.csv')
+#t=acommonfuncs.add_table(t,'outcomes_cface.csv')
 
 t['group03'] = '' #make a new group column with two groups: hc and PT
 for i in range(len(t)):
@@ -67,62 +137,8 @@ for i in range(len(t)):
     elif eval(PT)[i]: t.at[i,'group03'] = PT
 
 """
-r: Outer level keys are 'Intero', 'Extero'. Inner level keys are quality measures (Q_wrong_decisions_took_longer, Q_wrong_decisions_lower_confidence, Q_confidence_occurence_max, Q_HR_outlier_perc), SDT measures (dprime, criterion), psychophysics measures (threshold, slope), HR measures (bpm_mean, bpm_std) (HR not present for Extero condition)
+r: Outer level keys are 'Intero', 'Extero'. Inner level keys are quality measures (Q_wrong_decisions_took_longer, Q_wrong_decisions_lower_confidence, Q_confidence_occurence_max, Q_HR_outlier_perc), SDT measures (dprime, criterion), psychophysics measures (threshold, slope), HR measures (bpm_mean, RR_std,RMSSD) (HR not present for Extero condition)
 """
-
-def compare(subgroup1,subgroup2,column,include_these=None,to_plot_compare=False):
-    """
-    Plot strip-plot of sample values in each group. Compare sample means with t-test and p-value. Also return bootstrapped confidence intervals (robust to outliers)
-    """
-    if include_these is None:
-        include_these=t.iloc[:,0].copy()
-        include_these[:]=True #array of all Trues to include all rows
-    x = t.loc[t.use_hrd & eval(subgroup1) & include_these, column]
-    y = t.loc[t.use_hrd & eval(subgroup2) & include_these, column]     
-    mean_diff = np.mean(x)-np.mean(y)
-    p_ttest = ttest_ind(x,y).pvalue
-    p_MW = mannwhitneyu(x,y).pvalue
-    if to_plot_compare:
-        fig, ax = plt.subplots()
-        sns.set_context('talk')
-        sns.stripplot(ax=ax,y='group03',x=column,data=t.loc[t.use_hrd & (eval(subgroup1)|eval(subgroup2)) & include_these,:],alpha=0.5,palette=colors)
-        ax.set_title(f'meandiff={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
-        fig.tight_layout()
-        sns.despine()
-    else:
-        print(f'{column}\t {subgroup1} vs {subgroup2}:\t meandiff={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
-
-def scatter(group1,group2,column_name1,column_name2,robust=robust,include_these=None):
-    """
-    Scatter plot of column_name1 vs column_name2 from DataFrame t. Scatter points are colored by group1 and group2. Put correlation within each group on the title. Also plot a line of best fit for each group
-    """
-    if include_these is None:
-        include_these=t.iloc[:,0].copy()
-        include_these[:]=True #array of all Trues to include all rows
-    if robust: 
-        corr_func=spearmanr #could use skipped correlations in pingouin instead
-        reg_func = TheilSenRegressor
-    else: 
-        corr_func= pearsonr
-        reg_func = LinearRegression
-    fig, ax = plt.subplots()
-    if robust: title_string = 'Robust: '
-    else: title_string = 'Non-robust: '
-    for group in [group1,group2]:
-        x = t.loc[t.use_hrd & include_these & eval(group),column_name1]
-        y = t.loc[t.use_hrd & include_these & eval(group),column_name2]
-        r,p = corr_func(x,y)
-        xnew = np.linspace(min(x),max(x),100)
-        reg = reg_func().fit(x.values.reshape(-1,1),y.values)
-        ynew = reg.predict(xnew.reshape(-1,1))
-        ax.scatter(x,y,label=group,color=colors[group])
-        ax.plot(xnew,ynew,color=colors[group])
-        title_string += f'{group}: r={r:.2f} p={p:.2f}, '
-    ax.set_xlabel(column_name1)
-    ax.set_ylabel(column_name2)
-    ax.set_title(title_string[:-2])
-    ax.legend([group1,group2])
-    fig.tight_layout()
 
 has_sdt = ~t.hrd_Intero_dprime.isnull()
 
@@ -137,14 +153,42 @@ elif outlier_method=='madmedianrule':
     Intero_out=pg.madmedianrule(t.loc[t.use_hrd & (hc|eval(PT)),'hrd_Intero_threshold']) 
     HR_out=pg.madmedianrule(t.loc[t.use_hrd & (hc|eval(PT)),'hrd_Intero_bpm_mean']) 
     madmedian_outliers = Extero_out | Intero_out | HR_out
-    this_df = t.loc[t.use_hrd & (hc|eval(PT)),'record_id']
-    madmedian_outliers_record_ids = this_df[madmedian_outliers].values
-    not_outliers = np.array([True]*len(t))
-    for record_id in madmedian_outliers_record_ids:
-        index = this_df[this_df==record_id].index[0] #index of this record_id in t
-        not_outliers[index]=False
-
+    not_outliers = amyhrd_utils.get_outliers(t,t.loc[t.use_hrd & (hc|eval(PT)),'record_id'],madmedian_outliers)
 t.use_hrd = t.use_hrd & not_outliers #to exclude outliers from analyses
+
+print(f'hc, n={sum(t.use_hrd & hc)}')
+print(f'cc, n={sum(t.use_hrd & cc)}')
+print(f'sz, n={sum(t.use_hrd & sz)}')
+print(f'PT, n={sum(t.use_hrd & eval(PT))}')
+
+#Metacognition stuff
+
+#Print quality checks
+for cond in ['Intero','Extero']:
+    for measure in ['wrong_decisions_took_longer','wrong_decisions_lower_alpha_pos','wrong_decisions_lower_alpha_neg','wrong_decisions_lower_confidence','confidence_occurence_max']:
+        string = f'hrd_{cond}_Q_{measure}'
+        values = t.loc[t.use_hrd,string]
+        print(f'{cond} {measure} \t {np.mean(values):.2f}')
+values = t.loc[t.use_hrd & (hc|eval(PT)),'hrd_Intero_Q_HR_outlier_perc']
+print(f'Intero HR outlier perc \t {np.mean(values):.2f}')
+
+#Get confidence rating outliers
+Intero_confidence_out = t.loc[t.use_hrd & (hc|eval(PT)),'hrd_Intero_Q_confidence_occurence_max'] > 0.65
+Extero_confidence_out = t.loc[t.use_hrd & (hc|eval(PT)),'hrd_Extero_Q_confidence_occurence_max'] > 0.65
+confidence_out = Intero_confidence_out | Extero_confidence_out
+confidence_not_outliers = amyhrd_utils.get_outliers(t,t.loc[t.use_hrd & (hc|eval(PT)),'record_id'],confidence_out)
+
+#Get other quality check measures
+Q1_Extero_out = t.loc[t.use_hrd & (hc|eval(PT)),'hrd_Extero_Q_wrong_decisions_took_longer'] == False
+Q2_Extero_out = t.loc[t.use_hrd & (hc|eval(PT)),'hrd_Extero_Q_wrong_decisions_lower_alpha_pos'] == False
+Q3_Extero_out = t.loc[t.use_hrd & (hc|eval(PT)),'hrd_Extero_Q_wrong_decisions_lower_alpha_neg'] == False
+Q_Extero_out = Q1_Extero_out | Q2_Extero_out | Q3_Extero_out
+Q_Extero_not_outliers = amyhrd_utils.get_outliers(t,t.loc[t.use_hrd & (hc|eval(PT)),'record_id'],Q_Extero_out)
+
+
+
+
+
 
 #Use robust regression to predict interoceptive thresholds from exteroceptive thresholds
 x = t.loc[t.use_hrd & not_outliers,'hrd_Extero_threshold']
@@ -159,7 +203,6 @@ ax.set_xlabel('Exteroceptive threshold')
 ax.set_ylabel('Interoceptive threshold')
 ax.set_title(f'Theil-Sen regression: y = {reg.coef_[0]:.2f}x + {reg.intercept_:.2f}')
 
-
 if intero_adjust_method=='regress_extero':
     t['hrd_Intero_threshold_adj'] = np.nan
     t.loc[t.use_hrd,'hrd_Intero_threshold_adj'] = t.loc[t.use_hrd,'hrd_Intero_threshold'] - reg.predict(t.loc[t.use_hrd,'hrd_Extero_threshold'].values.reshape(-1,1))
@@ -171,49 +214,50 @@ t['hrd_Intero_threshold_abs'] = np.abs(t.hrd_Intero_threshold)
 t['hrd_Extero_threshold_abs'] = np.abs(t.hrd_Extero_threshold)
 t['hrd_Intero_threshold_adj_abs'] = np.abs(t.hrd_Intero_threshold_adj)
 
-
-print(f'hc, n={sum(t.use_hrd & hc)}')
-print(f'cc, n={sum(t.use_hrd & cc)}')
-print(f'sz, n={sum(t.use_hrd & sz)}')
-
-#df = t.loc[t.use_hrd & not_outliers & (t.group03!=''),:]
-#grid=sns.pairplot(df,hue='group03',corner=False,kind='reg',x_vars=['hrd_Intero_threshold_abs','hrd_Intero_bpm_mean'],y_vars=['hrd_Extero_threshold','hrd_Extero_slope'],height=1.0,palette=colors)
-
-
-
 #Correlations between HR measures. All highly correlated measures
-grid=amyhrd_utils.pairplot(t,vars=['hrd_Intero_bpm_mean','hrd_Intero_RR_std','hrd_Intero_RMSSD','meds_chlor'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
+grid=acommonfuncs.pairplot(t,vars=['hrd_Intero_bpm_mean','hrd_Intero_RR_std','hrd_Intero_RMSSD','meds_chlor'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
 
 """
 #Simple correlations between psychophysics measures. Sig: Intero_threshold corr with Extero_threshold. Distributions markedly different across groups
-grid=amyhrd_utils.pairplot(t,['hrd_Intero_threshold','hrd_Intero_slope','hrd_Extero_threshold','hrd_Extero_slope'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
+grid=acommonfuncs.pairplot(t,['hrd_Intero_threshold','hrd_Intero_slope','hrd_Extero_threshold','hrd_Extero_slope'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
 
 #Different versions of the 'threshold'. Only sig is extero_threshold_abs correlates with extero_slope
-grid=amyhrd_utils.pairplot(t,x_vars=['hrd_Intero_threshold_abs','hrd_Intero_threshold_adj','hrd_Intero_threshold_adj_abs','hrd_Extero_threshold_abs'],y_vars=['hrd_Intero_slope','hrd_Extero_threshold','hrd_Extero_slope'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
+grid=acommonfuncs.pairplot(t,x_vars=['hrd_Intero_threshold_abs','hrd_Intero_threshold_adj','hrd_Intero_threshold_adj_abs','hrd_Extero_threshold_abs'],y_vars=['hrd_Intero_slope','hrd_Extero_threshold','hrd_Extero_slope'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
 
 #Do HR measures interact with Intero/Extero measures? Only hrd_Intero_threshold_adj_abs vs hrd_Intero_bpm_mean is significant
-grid=amyhrd_utils.pairplot(t,x_vars = ['hrd_Intero_threshold','hrd_Intero_threshold_abs','hrd_Intero_threshold_adj','hrd_Intero_threshold_adj_abs','hrd_Intero_slope'],y_vars = ['hrd_Intero_bpm_mean','hrd_Intero_RR_std'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
+grid=acommonfuncs.pairplot(t,x_vars = ['hrd_Intero_threshold','hrd_Intero_threshold_abs','hrd_Intero_threshold_adj','hrd_Intero_threshold_adj_abs','hrd_Intero_slope'],y_vars = ['hrd_Intero_bpm_mean','hrd_Intero_RR_std'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
 
-grid=amyhrd_utils.pairplot(t,x_vars = ['hrd_Extero_threshold','hrd_Extero_threshold_abs','hrd_Extero_slope'],y_vars = ['hrd_Intero_bpm_mean','hrd_Intero_RR_std'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
+grid=acommonfuncs.pairplot(t,x_vars = ['hrd_Extero_threshold','hrd_Extero_threshold_abs','hrd_Extero_slope'],y_vars = ['hrd_Intero_bpm_mean','hrd_Intero_RR_std'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
 
 #Do clinical measures correlate with psychophyics? Sig: In HC only, high IQ correlates with high Intero_threshold. In patients only, low IQ correlates with exteroceptive imprecision and high exteroceptive |threshold|, but not with interoceptive measures
-grid=amyhrd_utils.pairplot(t,x_vars = ['hrd_Intero_threshold','hrd_Intero_threshold_abs','hrd_Intero_threshold_adj','hrd_Intero_threshold_adj_abs','hrd_Intero_slope'],y_vars = ['fsiq2','sofas','panss_N'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
+grid=acommonfuncs.pairplot(t,x_vars = ['hrd_Intero_threshold','hrd_Intero_threshold_abs','hrd_Intero_threshold_adj','hrd_Intero_threshold_adj_abs','hrd_Intero_slope'],y_vars = ['fsiq2','sofas','panss_N'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
 
-grid=amyhrd_utils.pairplot(t,x_vars = ['hrd_Extero_threshold','hrd_Extero_threshold_abs','hrd_Extero_slope'],y_vars = ['fsiq2','sofas','panss_N'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
+grid=acommonfuncs.pairplot(t,x_vars = ['hrd_Extero_threshold','hrd_Extero_threshold_abs','hrd_Extero_slope'],y_vars = ['fsiq2','sofas','panss_N'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
 """
 
+#Scatterplots of 2 variables, for controls and patient groups
+amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_threshold','hrd_Extero_threshold',robust=robust)
+amyhrd_utils.scatter(t,'hc',PT,'hrd_Extero_threshold_abs','hrd_Extero_slope',robust=robust)
 
-scatter('hc',PT,'hrd_Intero_threshold','hrd_Extero_threshold')
-scatter('hc',PT,'hrd_Extero_threshold_abs','hrd_Extero_slope')
+amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj_abs',robust=robust)
 
-scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj_abs')
-
-scatter('hc',PT,'fsiq2','hrd_Extero_threshold_abs')
-scatter('hc',PT,'fsiq2','hrd_Extero_slope')
+amyhrd_utils.scatter(t,'hc',PT,'fsiq2','hrd_Extero_threshold_abs',robust=robust)
+amyhrd_utils.scatter(t,'hc',PT,'fsiq2','hrd_Extero_slope',robust=robust)
 
 
+#Are psychophysics measures different across groups? 
+for cond in ['Intero','Extero']:
+    #compare('hc',PT,f'hrd_{cond}_dprime',has_sdt)
+    #compare('hc',PT,f'hrd_{cond}_criterion',has_sdt)
+    amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_threshold',to_plot_compare=to_plot)
+    amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_threshold_abs')  
+    if cond=='Intero':
+        amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_threshold_adj')
+        amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_threshold_adj_abs')
+    amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_slope',to_plot_compare=to_plot)
 
 #Plot intero/extero thresholds/slopes for both groups together
+"""
 fig,ax=plt.subplots()
 for group in ['hc',PT]:
     for cond in ['Intero','Extero']:
@@ -225,48 +269,37 @@ for group in ['hc',PT]:
 ax.set_xlabel('slope')
 ax.set_ylabel('threshold')
 ax.legend()
-
-
-#Are psychophysics measures different across groups? Yes, for exteroceptive slope, interoceptive |threshold|, but only weak trend in interoceptive slope or exteroceptive |threshold|
-for cond in ['Intero','Extero']:
-    #compare('hc',PT,f'hrd_{cond}_dprime',has_sdt)
-    #compare('hc',PT,f'hrd_{cond}_criterion',has_sdt)
-    compare('hc',PT,f'hrd_{cond}_threshold',to_plot_compare=to_plot)
-    compare('hc',PT,f'hrd_{cond}_threshold_abs')  
-    if cond=='Intero':
-        compare('hc',PT,f'hrd_{cond}_threshold_adj')
-        compare('hc',PT,f'hrd_{cond}_threshold_adj_abs')
-    compare('hc',PT,f'hrd_{cond}_slope',to_plot_compare=to_plot)
-
-t['hrd_Extero_threshold_adj'] = t['hrd_Extero_threshold'] #just a copy
-t['hrd_Extero_threshold_adj_abs'] = t['hrd_Extero_threshold_abs'] #just a copy
-
-#Make new table t2, where interoceptive and exteroceptive thresholds are in the same column, and there is a new column 'cond' which is either 'Intero' or 'Extero'
-vars = ['hrd_threshold','hrd_threshold_abs','hrd_slope','hrd_threshold_adj','hrd_threshold_adj_abs']
-t2 = pd.DataFrame(columns = list(t.columns) + vars + ['cond'])
-for i in range(len(t)):
-    if t.loc[i,'use_hrd'] & (hc|eval(PT))[i]:
-        if hc[i]: group='hc'
-        elif eval(PT)[i]: group=PT    
-        for cond in ['Intero','Extero']:
-            row = dict(t.loc[i,:])
-            #row.pop('Unnamed: 0')
-            #row['group'] = group
-            row['cond'] = cond
-            for var in vars:
-                old_column_name = f'{var[0:3]}_{cond}_{var[4:]}'
-                row[var] = t.at[i,old_column_name]
-            t2 = t2.append(row,ignore_index=True)
+"""
 
 if intero_adjust_method=='regress_extero':
     #Effect disappears in linear model when including HR
     print(sm.stats.anova_lm(smf.ols('hrd_Intero_threshold_adj_abs ~ group03 + hrd_Intero_bpm_mean', data=t.loc[t.use_hrd & (hc|eval(PT)),:]).fit(), typ=2))
 
     #But HR doesn't account for interoceptive thresholds in controls
-    scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj_abs')
-    scatter('hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj')
+    amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj_abs',robust=robust)
+    amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj',robust=robust)
 
 elif intero_adjust_method == 'add7':
+
+    #Make new table t2, where interoceptive and exteroceptive thresholds are in the same column, and there is a new column 'cond' which is either 'Intero' or 'Extero'
+    t['hrd_Extero_threshold_adj'] = t['hrd_Extero_threshold'] #just a copy
+    t['hrd_Extero_threshold_adj_abs'] = t['hrd_Extero_threshold_abs'] #just a copy
+    vars = ['hrd_threshold','hrd_threshold_abs','hrd_slope','hrd_threshold_adj','hrd_threshold_adj_abs']
+    t2 = pd.DataFrame(columns = list(t.columns) + vars + ['cond'])
+    for i in range(len(t)):
+        if t.loc[i,'use_hrd'] & (hc|eval(PT))[i]:
+            if hc[i]: group='hc'
+            elif eval(PT)[i]: group=PT    
+            for cond in ['Intero','Extero']:
+                row = dict(t.loc[i,:])
+                #row.pop('Unnamed: 0')
+                #row['group'] = group
+                row['cond'] = cond
+                for var in vars:
+                    old_column_name = f'{var[0:3]}_{cond}_{var[4:]}'
+                    row[var] = t.at[i,old_column_name]
+                t2 = t2.append(row,ignore_index=True)
+
     #pingoin's mixed_anova
     print(pg.mixed_anova(data=t2, dv='hrd_threshold_abs', within='cond', subject='record_id', between='group03')) #sig
     print(pg.mixed_anova(data=t2, dv='hrd_threshold_adj_abs', within='cond', subject='record_id', between='group03',correction=True)) #not sig
@@ -301,12 +334,14 @@ fig.tight_layout()
 sns.despine()
 """
 
+
 """
+#Correlations between psychophysics measures and cface task measures
 scatter('hc',PT,'hrd_Intero_threshold_abs','cface_amp_max_mean',include_these=t.use_cface & t.cface_latencies_validperc_ha)
 scatter('hc',PT,'hrd_Intero_slope','cface_amp_max_mean',include_these=t.use_cface & t.cface_latencies_validperc_ha)
 scatter('hc',PT,'hrd_Intero_threshold_abs','cface_latencies_mean_ha',include_these=t.use_cface & t.cface_latencies_validperc_ha)
 scatter('hc',PT,'hrd_Intero_slope','cface_latencies_mean_ha',include_these=t.use_cface & t.cface_latencies_validperc_ha)
-amyhrd_utils.pairplot(t,['hrd_Intero_threshold_abs','hrd_Extero_threshold_abs','hrd_Intero_slope','cface_amp_max_mean','cface_latencies_mean_ha','cface_latencies_mean_an'],include_these=t.use_hrd & t.use_cface & not_outliers)
+acommonfuncs.pairplot(t,['hrd_Intero_threshold_abs','hrd_Extero_threshold_abs','hrd_Intero_slope','cface_amp_max_mean','cface_latencies_mean_ha','cface_latencies_mean_an'],include_these=t.use_hrd & t.use_cface & not_outliers)
 """
 
 plt.show(block=False)

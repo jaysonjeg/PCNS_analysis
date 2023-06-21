@@ -13,70 +13,69 @@ from scipy.stats import spearmanr, pearsonr, mannwhitneyu, ttest_ind, zscore
 from sklearn.linear_model import LinearRegression, TheilSenRegressor
 from acommonvars import *
 
-    
-def corr(t,group,column_name1, column_name2, robust=True,include_these=None):
+def get_outliers(t,this_df,outlier_in_subset):
+    outliers_record_ids = this_df[outlier_in_subset].values
+    not_outliers = np.array([True]*len(t))
+    for record_id in outliers_record_ids:
+        index = this_df[this_df==record_id].index[0] #index of this record_id in t
+        not_outliers[index]=False   
+    return not_outliers
+
+
+
+def compare(t,subgroup1,subgroup2,column,include_these=None,to_plot_compare=False):
+    """
+    Plot strip-plot of sample values in each group. Compare sample means with t-test and p-value. Also return bootstrapped confidence intervals (robust to outliers)
+    """
+    if include_these is None:
+        include_these=t.iloc[:,0].copy()
+        include_these[:]=True #array of all Trues to include all rows
+    x = t.loc[t.use_hrd & eval(subgroup1) & include_these, column]
+    y = t.loc[t.use_hrd & eval(subgroup2) & include_these, column]     
+    mean_diff = np.mean(x)-np.mean(y)
+    p_ttest = ttest_ind(x,y).pvalue
+    p_MW = mannwhitneyu(x,y).pvalue
+    if to_plot_compare:
+        fig, ax = plt.subplots()
+        sns.set_context('talk')
+        sns.stripplot(ax=ax,y='group03',x=column,data=t.loc[t.use_hrd & (eval(subgroup1)|eval(subgroup2)) & include_these,:],alpha=0.5,palette=colors)
+        ax.set_title(f'meandiff={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
+        fig.tight_layout()
+        sns.despine()
+    else:
+        print(f'{column}\t {subgroup1} vs {subgroup2}:\t meandiff={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
+
+def scatter(t,group1,group2,column_name1,column_name2,robust=True,include_these=None):
+    """
+    Scatter plot of column_name1 vs column_name2 from DataFrame t. Scatter points are colored by group1 and group2. Put correlation within each group on the title. Also plot a line of best fit for each group
+    """
     if include_these is None:
         include_these=t.iloc[:,0].copy()
         include_these[:]=True #array of all Trues to include all rows
     if robust: 
-        corr_func = spearmanr
+        corr_func=spearmanr #could use skipped correlations in pingouin instead
+        reg_func = TheilSenRegressor
     else: 
         corr_func= pearsonr
-    x = t.loc[t.use_hrd & include_these & eval(group),column_name1]
-    y = t.loc[t.use_hrd & include_these & eval(group),column_name2]
-    r,p = corr_func(x,y)
-    return r,p
-def corr_2groups(t,group1,group2,column_name1,column_name2,robust=True,include_these=None):
-    title_string=f'{column_name1} vs {column_name2} '
-    if robust: title_string += 'pearsonr:\t'
-    else: title_string += 'spearmanr:\t'
+        reg_func = LinearRegression
+    fig, ax = plt.subplots()
+    if robust: title_string = 'Robust: '
+    else: title_string = 'Non-robust: '
     for group in [group1,group2]:
-        r,p=corr(t,group,column_name1,column_name2,robust=robust,include_these=include_these)
+        x = t.loc[t.use_hrd & include_these & eval(group),column_name1]
+        y = t.loc[t.use_hrd & include_these & eval(group),column_name2]
+        r,p = corr_func(x,y)
+        xnew = np.linspace(min(x),max(x),100)
+        reg = reg_func().fit(x.values.reshape(-1,1),y.values)
+        ynew = reg.predict(xnew.reshape(-1,1))
+        ax.scatter(x,y,label=group,color=colors[group])
+        ax.plot(xnew,ynew,color=colors[group])
         title_string += f'{group}: r={r:.2f} p={p:.2f}, '
-    print(title_string)   
-
-def pairplot(t,vars=None,x_vars=None,y_vars=None,height=1.5,include_these=None,kind='reg',robust=True):
-    """
-    Scatterplot of all pairwise variables in vars, and kernel density plots for each variable on the diagonal
-    Correlation coefficients and p-values are printed as titles
-    """
-    if include_these is None:
-        include_these=t.iloc[:,0].copy()
-        include_these[:]=True #array of all Trues to include all rows
-    sns.set_context('paper')
-    if vars is not None:
-        x_vars=vars
-        y_vars=vars
-        corner=True
-    else:
-        corner=False
-    grid=sns.pairplot(t.loc[include_these & (t.group03!=''),:],hue='group03',corner=corner,kind=kind,x_vars=x_vars,y_vars=y_vars,height=height,palette=colors)
-    grid.fig.suptitle(f'Robust={robust}')
-    groups = [i for i in np.unique(t.group03) if i is not '']
-    #Put correlation values on the off-diagonals
-    for i in range(len(x_vars)):
-        for j in range(len(y_vars)):
-            if (vars is None) or (j>i):
-                if robust: corr_func = spearmanr
-                else: corr_func= pearsonr
-                title=''
-                for group in groups:
-                    x = t.loc[include_these & eval(group),x_vars[i]]
-                    y = t.loc[include_these & eval(group),y_vars[j]]
-                    r,p=corr_func(x,y)
-                    title += f'{group}: r={r:.2f} p={p:.2f}, '
-                grid.axes[j,i].set_title(title)
-    #Put differences between groups on the diagonals
-    if vars is not None:
-        for i in range(len(vars)):
-            x = t.loc[include_these & eval(groups[0]),vars[i]]
-            y = t.loc[include_these & eval(groups[1]),vars[i]]
-            mean_diff = np.mean(x)-np.mean(y)
-            p_ttest = ttest_ind(x,y).pvalue
-            p_MW = mannwhitneyu(x,y).pvalue
-            grid.axes[i,i].set_title(f'{groups[0]}-{groups[1]}={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
-        grid.fig.tight_layout(pad=0,w_pad=0,h_pad=0.5)
-    return grid
+    ax.set_xlabel(column_name1)
+    ax.set_ylabel(column_name2)
+    ax.set_title(title_string[:-2])
+    ax.legend([group1,group2])
+    fig.tight_layout()
 
 def get_outcomes(subject,to_print_subject,to_plot_subject):
 
@@ -106,7 +105,7 @@ def get_outcomes(subject,to_print_subject,to_plot_subject):
     for cond in ['Intero','Extero']: 
         wrong_decisions_took_longer = df.loc[(df.Modality==cond) & (df.ResponseCorrect==True) , 'DecisionRT'].mean() < df.loc[(df.Modality==cond) & (df.ResponseCorrect==False) , 'DecisionRT'].mean() 
         r[cond]['Q_wrong_decisions_took_longer']=wrong_decisions_took_longer
-    #Quality check 2: mean(|alpha|) is higher during ResponseCorrect trials than ResponseIncorrect trials. Can be irrelevant if the 'threshold' is far from 0.
+    #Quality check 2: mean(|alpha|) is higher during ResponseCorrect trials than ResponseIncorrect trials. Can be irrelevant if the 'threshold' is far from 0. Particularly for Intero.
     for cond in ['Intero','Extero']:
         r[cond]['Q_wrong_decisions_lower_alpha_pos'] = np.abs(df.loc[(df.Modality==cond) & (df.ResponseCorrect==True) & (df.Alpha>0) , 'Alpha'].mean()) > np.abs(df.loc[(df.Modality==cond) & (df.ResponseCorrect==False) & (df.Alpha>0) , 'Alpha'].mean())
         r[cond]['Q_wrong_decisions_lower_alpha_neg'] = np.abs(df.loc[(df.Modality==cond) & (df.ResponseCorrect==True) & (df.Alpha<0) , 'Alpha'].mean()) > np.abs(df.loc[(df.Modality==cond) & (df.ResponseCorrect==False) & (df.Alpha<0) , 'Alpha'].mean())

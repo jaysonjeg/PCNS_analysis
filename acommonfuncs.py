@@ -3,6 +3,8 @@ Contains functions used by different scripts in roject_PCNS/Code_analysis
 """
 import numpy as np, pandas as pd, datetime
 from glob import glob
+import seaborn as sns
+from scipy.stats import ttest_ind,mannwhitneyu,pearsonr,spearmanr
 from acommonvars import *
 
 class clock():
@@ -32,6 +34,75 @@ def add_table(t,csv_file):
         if col not in t.columns:
             t[col] = other_t[col]
     return t
+
+
+
+    
+def corr(t,group,column_name1, column_name2, robust=True,include_these=None):
+    if include_these is None:
+        include_these=t.iloc[:,0].copy()
+        include_these[:]=True #array of all Trues to include all rows
+    if robust: 
+        corr_func = spearmanr
+    else: 
+        corr_func= pearsonr
+    x = t.loc[t.use_hrd & include_these & eval(group),column_name1]
+    y = t.loc[t.use_hrd & include_these & eval(group),column_name2]
+    r,p = corr_func(x,y)
+    return r,p
+def corr_2groups(t,group1,group2,column_name1,column_name2,robust=True,include_these=None):
+    title_string=f'{column_name1} vs {column_name2} '
+    if robust: title_string += 'pearsonr:\t'
+    else: title_string += 'spearmanr:\t'
+    for group in [group1,group2]:
+        r,p=corr(t,group,column_name1,column_name2,robust=robust,include_these=include_these)
+        title_string += f'{group}: r={r:.2f} p={p:.2f}, '
+    print(title_string)   
+
+def pairplot(t,vars=None,x_vars=None,y_vars=None,height=1.5,include_these=None,kind='reg',robust=True):
+    """
+    Scatterplot of all pairwise variables in vars, and kernel density plots for each variable on the diagonal
+    Correlation coefficients and p-values are printed as titles
+    """
+    if include_these is None:
+        include_these=t.iloc[:,0].copy()
+        include_these[:]=True #array of all Trues to include all rows
+    sns.set_context('paper')
+    if vars is not None:
+        x_vars=vars
+        y_vars=vars
+        corner=True
+    else:
+        corner=False
+    grid=sns.pairplot(t.loc[include_these & (t.group03!=''),:],hue='group03',corner=corner,kind=kind,x_vars=x_vars,y_vars=y_vars,height=height,palette=colors)
+    grid.fig.suptitle(f'Robust={robust}')
+    groups = [i for i in np.unique(t.group03) if i is not '']
+    #Put correlation values on the off-diagonals
+    for i in range(len(x_vars)):
+        for j in range(len(y_vars)):
+            if (vars is None) or (j>i):
+                if robust: corr_func = spearmanr
+                else: corr_func= pearsonr
+                title=''
+                for group in groups:
+                    x = t.loc[include_these & eval(group),x_vars[i]]
+                    y = t.loc[include_these & eval(group),y_vars[j]]
+                    r,p=corr_func(x,y)
+                    title += f'{group}: r={r:.2f} p={p:.2f}, '
+                grid.axes[j,i].set_title(title)
+    #Put differences between groups on the diagonals
+    if vars is not None:
+        for i in range(len(vars)):
+            x = t.loc[include_these & eval(groups[0]),vars[i]]
+            y = t.loc[include_these & eval(groups[1]),vars[i]]
+            mean_diff = np.mean(x)-np.mean(y)
+            p_ttest = ttest_ind(x,y).pvalue
+            p_MW = mannwhitneyu(x,y).pvalue
+            grid.axes[i,i].set_title(f'{groups[0]}-{groups[1]}={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
+        grid.fig.tight_layout(pad=0,w_pad=0,h_pad=0.5)
+    return grid
+
+
 
 def get_beh_data(taskname,subject,suffix,use_MRI_task,header='infer'):
     """
