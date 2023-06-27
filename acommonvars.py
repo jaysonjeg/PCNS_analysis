@@ -22,17 +22,25 @@ Education: 1, Didn't finish HS; 2, High school; 3, Non-university qualification;
 
 import numpy as np, pandas as pd
 from datetime import datetime
+import os
 
 ### SETTABLE PARAMETERS ###
 """
 Sets 'data_folder', 'intermediates_folder', and 'redcap_file' to correct paths
 """
 
+if os.environ['COMPUTERNAME']=='HDR-879SN13': 
+    pc='laptop' #only works on Windows
+    files_source='NEWYSNG'
+elif os.environ['COMPUTERNAME']=='DESKTOP-EGSQF3A': 
+    pc='home'
+    files_source='local' #'local' for local machine, or else 'NEWYSNG' for shared drive
 
-pc='home' #'laptop', 'home'
-files_source='local' #'local' for local machine, or else 'NEWYSNG' for shared drive
 if pc=='laptop' and files_source=='NEWYSNG':
-    data_folder="Z:\\Shiami_DICOM\\Psychosis\\PCNS"
+    #data_folder="Z:\\Shiami_DICOM\\Psychosis\\PCNS"
+    data_folder="Z:\\PCNS\\Data\\Data_raw\\per_subject"
+    temp_folder="Z:\\PCNS\\Data\\Data_analysis\\temp"
+    redcap_file = "Z:\\PCNS\\Data\\CogEmotPsych_DATA_2023-06-16_0813.csv"
 elif pc=='home':
     intermediates_folder='D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates'
     if files_source == 'NEWYSNG':
@@ -40,7 +48,7 @@ elif pc=='home':
     elif files_source == 'local':
         data_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw"
         temp_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_analysis\\temp"
-redcap_file = "D:\\OneDrive - The University Of Newcastle\\Drive\PhD\\Project_PCNS\\BackupRedcap\\CogEmotPsych_DATA_2023-06-16_0813.csv"
+    redcap_file = "D:\\OneDrive - The University Of Newcastle\\Drive\PhD\\Project_PCNS\\BackupRedcap\\CogEmotPsych_DATA_2023-06-16_0813.csv"
 
 '''
 data_folder="G:\\My Drive\\Share_Angelica\\Data_raw\\per_subject"

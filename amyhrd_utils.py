@@ -2,12 +2,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-from metadPy import sdt
-from metadPy.utils import trials2counts, discreteRatings
-from metadPy.plotting import plot_confidence
+from metadpy import sdt
+from metadpy.utils import trials2counts, discreteRatings
+from metadpy.plotting import plot_confidence
+from metadpy.mle import metad
 from systole.detection import oxi_peaks
 import pingouin as pg
 from glob import glob
+import warnings
 from scipy.stats import norm
 from scipy.stats import spearmanr, pearsonr, mannwhitneyu, ttest_ind, zscore
 from sklearn.linear_model import LinearRegression, TheilSenRegressor
@@ -38,7 +40,9 @@ def compare(t,subgroup1,subgroup2,column,include_these=None,to_plot_compare=Fals
     if to_plot_compare:
         fig, ax = plt.subplots()
         sns.set_context('talk')
-        sns.stripplot(ax=ax,y='group03',x=column,data=t.loc[t.use_hrd & (eval(subgroup1)|eval(subgroup2)) & include_these,:],alpha=0.5,palette=colors)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=FutureWarning)
+            sns.stripplot(ax=ax,y='group03',x=column,data=t.loc[t.use_hrd & (eval(subgroup1)|eval(subgroup2)) & include_these,:],alpha=0.5,palette=colors)
         ax.set_title(f'meandiff={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
         fig.tight_layout()
         sns.despine()
@@ -148,6 +152,32 @@ def get_outcomes(subject,to_print_subject,to_plot_subject):
         threshold, slope = this_df.EstimatedThreshold.iloc[-1], this_df.EstimatedSlope.iloc[-1] 
         r[cond]['threshold']=threshold
         r[cond]['slope']=slope
+
+    #Metacognition
+    for i, cond in enumerate(['Intero', 'Extero']):
+        this_df = df[df.Modality == cond]
+        this_df = this_df[~this_df.Confidence.isnull()]
+        try:
+            new_confidence, _ = discreteRatings(this_df.Confidence) # discretize confidence ratings into 4 bins
+            this_df['Confidence'] = new_confidence
+            this_df['Stimuli'] = (this_df.Alpha > 0).astype('int')
+            this_df['Responses'] = (this_df.Decision == 'More').astype('int')
+            nR_S1, nR_S2 = trials2counts(data=this_df)
+            z=metad(data=this_df,nRatings=4,stimuli='Stimuli',accuracy='Accuracy',confidence='Confidence',verbose=0) #estimate meta dprime using MLE
+            r[cond]['meta_d']=z['meta_d'][0]
+            r[cond]['m_ratio']=z['m_ratio'][0]
+            r[cond]['roc_auc']=this_df.roc_auc(nRatings=4)
+            """
+            from metadpy.bayesian import hmetad
+            import arviz as az
+            model, trace = hmetad(
+            data=this_df, nRatings=4, stimuli='Stimuli',
+            accuracy='Accuracy', confidence='Confidence'
+            )
+            metad_bayesian = az.summary(trace).loc['meta_d','mean']
+            """
+        except:
+            print('Error in getting metacognition')
 
     if to_plot_subject:
         #Figure 1. Response times for Intero, Extero x Correct or Incorrect responses - for decision-making and confidence rating
@@ -343,7 +373,9 @@ def get_outcomes(subject,to_print_subject,to_plot_subject):
         
         signal, peaks = oxi_peaks(this_df.signal, sfreq=1000) 
         bpm = 60000/np.diff(np.where(peaks)[0]) #calculate each RR interval and convert to bpm. Each trial will have about 5 of these
-        bpm_df = bpm_df.append(pd.DataFrame({'bpm': bpm, 'nEpoch': i, 'nTrial': trial}))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=FutureWarning)
+            bpm_df = bpm_df.append(pd.DataFrame({'bpm': bpm, 'nEpoch': i, 'nTrial': trial}))
         RR = np.diff(np.where(peaks)[0]) #RR intervals (ms)
         RR_list += list(RR)
         RRdiff = np.diff(RR) #difference between consecutive RR intervals (ms)
