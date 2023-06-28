@@ -34,16 +34,17 @@ if __name__=='__main__':
     load_table=True
     robust=True #robust statistical analyses, or otherwise usual analyses (pearson r, t-test)
 
-    PT = 'cc' #patient group: 'cc', 'sz'
+    PT = 'sz' #patient group: 'cc', 'sz'
     print(f'Analyses below compare hc with {PT}')
 
-    intero_adjust_method = 'add7' #'regress_extero' or 'add7'
+    intero_adjust_method = 'regress_extero' #'regress_extero', 'add7', 'none'
     print(f'Adjusting interoceptive thresholds by {intero_adjust_method}')
 
     outlier_method = 'zscore' #'zscore' or 'madmedianrule'
     outlier_cutoff = 3 #z-score for outlier cutoff. Could use MAD-median method in pingoin instead
 
 
+    '''
     from glob import glob
     from metadpy import sdt
     from metadpy.utils import trials2counts, discreteRatings
@@ -110,7 +111,7 @@ if __name__=='__main__':
 
         plt.show(block=False)
         assert(0)
-
+    '''
 
 
     #outcomes,durations = amyhrd_utils.get_outcomes('015',to_print_subject=True,to_plot_subject=False) #015 has dramatic threshold, 073 weird confidences
@@ -140,9 +141,6 @@ if __name__=='__main__':
     r: Outer level keys are 'Intero', 'Extero'. Inner level keys are quality measures (Q_wrong_decisions_took_longer, Q_wrong_decisions_lower_confidence, Q_confidence_occurence_max, Q_HR_outlier_perc), SDT measures (dprime, criterion), psychophysics measures (threshold, slope), HR measures (bpm_mean, RR_std,RMSSD) (HR not present for Extero condition)
     """
 
-    has_sdt = ~t.hrd_Intero_dprime.isnull()
-
-
     if outlier_method=='zscore':
         Extero_zscores = zscore(t.hrd_Extero_threshold,nan_policy='omit')
         Intero_zscores = zscore(t.hrd_Intero_threshold,nan_policy='omit')
@@ -161,7 +159,6 @@ if __name__=='__main__':
     print(f'sz, n={sum(t.use_hrd & sz)}')
     print(f'PT, n={sum(t.use_hrd & eval(PT))}')
 
-    #Metacognition stuff
 
     #Print quality checks
     for cond in ['Intero','Extero']:
@@ -186,8 +183,9 @@ if __name__=='__main__':
     Q_Extero_not_outliers = amyhrd_utils.get_outliers(t,t.loc[t.use_hrd & (hc|eval(PT)),'record_id'],Q_Extero_out)
 
 
-
-
+    has_sdt = ~t.hrd_Intero_dprime.isnull()
+    has_metad = ~t.hrd_Intero_meta_d.isnull() & ~t.hrd_Extero_meta_d.isnull()
+    has_metad = has_metad & confidence_not_outliers
 
 
     #Use robust regression to predict interoceptive thresholds from exteroceptive thresholds
@@ -208,6 +206,8 @@ if __name__=='__main__':
         t.loc[t.use_hrd,'hrd_Intero_threshold_adj'] = t.loc[t.use_hrd,'hrd_Intero_threshold'] - reg.predict(t.loc[t.use_hrd,'hrd_Extero_threshold'].values.reshape(-1,1))
     elif intero_adjust_method=='add7':
         t['hrd_Intero_threshold_adj'] = t['hrd_Intero_threshold'] + 7 #a simpler way to adjust
+    elif intero_adjust_method=='none':
+        t['hrd_Intero_threshold_adj'] = t['hrd_Intero_threshold']
 
     #Absolute value of thresholds
     t['hrd_Intero_threshold_abs'] = np.abs(t.hrd_Intero_threshold)
@@ -244,6 +244,18 @@ if __name__=='__main__':
     amyhrd_utils.scatter(t,'hc',PT,'fsiq2','hrd_Extero_threshold_abs',robust=robust)
     amyhrd_utils.scatter(t,'hc',PT,'fsiq2','hrd_Extero_slope',robust=robust)
 
+    amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_threshold','hrd_Intero_roc_auc',include_these=has_metad,robust=robust)
+    #amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_threshold','hrd_Intero_meta_d',include_these=has_metad,robust=robust)
+    amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_threshold','hrd_Intero_m_ratio',include_these=has_metad,robust=robust)
+    #amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_threshold_adj','hrd_Intero_roc_auc',include_these=has_metad,robust=robust)
+    #amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_threshold_adj','hrd_Intero_meta_d',include_these=has_metad,robust=robust)
+    #amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_threshold_adj','hrd_Intero_m_ratio',include_these=has_metad,robust=robust)
+    #amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_threshold_adj_abs','hrd_Intero_roc_auc',include_these=has_metad,robust=robust)
+    #amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_threshold_adj_abs','hrd_Intero_meta_d',include_these=has_metad,robust=robust)
+    #amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_threshold_adj_abs','hrd_Intero_m_ratio',include_these=has_metad,robust=robust)
+    #amyhrd_utils.scatter(t,'hc',PT,'hrd_Extero_threshold','hrd_Extero_roc_auc',include_these=has_metad,robust=robust)
+    #amyhrd_utils.scatter(t,'hc',PT,'hrd_Extero_threshold','hrd_Extero_meta_d',include_these=has_metad,robust=robust)
+    #amyhrd_utils.scatter(t,'hc',PT,'hrd_Extero_threshold','hrd_Extero_m_ratio',include_these=has_metad,robust=robust)
 
     #Are psychophysics measures different across groups? 
     for cond in ['Intero','Extero']:
@@ -255,6 +267,9 @@ if __name__=='__main__':
             amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_threshold_adj')
             amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_threshold_adj_abs')
         amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_slope',to_plot_compare=to_plot)
+        amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_meta_d',include_these=has_metad,to_plot_compare=to_plot)
+        amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_m_ratio',include_these=has_metad,to_plot_compare=to_plot)
+
 
     #Plot intero/extero thresholds/slopes for both groups together
     """
@@ -274,12 +289,10 @@ if __name__=='__main__':
     if intero_adjust_method=='regress_extero':
         #Effect disappears in linear model when including HR
         print(sm.stats.anova_lm(smf.ols('hrd_Intero_threshold_adj_abs ~ group03 + hrd_Intero_bpm_mean', data=t.loc[t.use_hrd & (hc|eval(PT)),:]).fit(), typ=2))
+        #But HR doesn't account for interoceptive thresholds in controls if you look at plot of 'bpm' vs 'intero_threshold_adj_abs'
 
-        #But HR doesn't account for interoceptive thresholds in controls
-        amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj_abs',robust=robust)
-        amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj',robust=robust)
 
-    elif intero_adjust_method == 'add7':
+    elif intero_adjust_method in ['add7','none']:
         import warnings
         warnings.simplefilter("ignore", category=FutureWarning)
         #Make new table t2, where interoceptive and exteroceptive thresholds are in the same column, and there is a new column 'cond' which is either 'Intero' or 'Extero'
