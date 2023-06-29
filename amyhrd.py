@@ -3,6 +3,30 @@ Anayse myHRD
 Basically Copied myJupHeartRateDiscrimination.ipynb
 Needs conda environment 'hr'
 PPG was actually recorded at 100Hz but resampled to 1000Hz before saving as signal.txt. Signal.txt only contains PPG signals during HR listening time for interoceptive condition (5 sec per trial, but somehow saved 6sec). So in total PPG represents 6sec * 40 trials = 240 sec of HR recording. PPG in signal.txt is not continguous.
+
+Adds new columns to t, prefixed by given by "hrd_{Modality}_{outcome}
+Modality can be "Intero" or "Extero"
+Outcomes:
+    Psychometric function values
+        Final estimates using psi staircase: threshold_psi, slope_psi
+        Fitted, single subject, Bayesian: threshold_Bay, slope_Bay (exclude HR outliers)
+    SDT outcomes: dprime, criterion
+    Metacognition (all exclude HR outliers)
+        Single subject MLE: meta_d_MLE, m_ratio_MLE
+        Single subject Bayesian: dprime_Bay, meta_d_Bay, m_ratio_Bay
+        Group level MLE: meta_d_groupMLE, m_ratio_groupMLE
+    HR outcomes: (only with "Intero" modality)
+        bpm_mean
+        RR_std
+        RMSSD
+
+Quaity control outcomes begin with hrd_{Modality}_Q_{outcome}
+    wrong_decisions_lower_alpha_pos
+    wrong_decisions_lower_alpha_neg
+    wrong_decisions_lower_confidence
+    confidence_occurence_max: The maximum proportional occurence of any of the 4 confidence categories (out of 1.0)
+
+
 """
 
 import pandas as pd
@@ -21,17 +45,18 @@ import amyhrd_utils
 """
 015, 067: have very negative threshold values, so SDT unable to be estimated
 031: said very high confidence for almost everyone
-073: confidence ratings are mostly 0 or 100
+073: confidence ratings are mostly 0 or 100. Make sure this is excluded
 """
 
 if __name__=='__main__':
-    subjects_to_exclude_confidence = ['073']
+    clock = acommonfuncs.clock()
 
+    #SETTABLE PARAMETERS
     to_print_subject=False
     to_plot_subject=False
     to_plot=True
 
-    load_table=True
+    load_table=False
     robust=True #robust statistical analyses, or otherwise usual analyses (pearson r, t-test)
 
     PT = 'sz' #patient group: 'cc', 'sz'
@@ -43,99 +68,130 @@ if __name__=='__main__':
     outlier_method = 'zscore' #'zscore' or 'madmedianrule'
     outlier_cutoff = 3 #z-score for outlier cutoff. Could use MAD-median method in pingoin instead
 
+    #outcomes,durations, df = amyhrd_utils.get_outcomes('130',to_print_subject=False,to_plot_subject=False) #015 has dramatic threshold, 073 weird confidences
+    #print(f'Done at {clock.time()[1]}')
+    #assert(0)
 
-    '''
-    from glob import glob
-    from metadpy import sdt
-    from metadpy.utils import trials2counts, discreteRatings
-    from metadpy.plotting import plot_confidence, plot_roc
-    subject='065'
-    r={'Intero':{},'Extero':{}} #stores outcome measures for this subject
-    contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\HRD*")
-    assert(len(contents)==1)
-    resultsFolder=contents[0]
-    df=pd.read_csv(glob(f"{resultsFolder}\\*final.txt")[0]) # Logs dataframe
-    interoPost=np.load(glob(f"{resultsFolder}\\*Intero_posterior.npy")[0]) # History of posteriors distribution
-    exteroPost=np.load(glob(f"{resultsFolder}\\*Extero_posterior.npy")[0])
-    signal_df=pd.read_csv(glob(f"{resultsFolder}\\*signal.txt")[0]) # PPG signal
-    signal_df['Time'] = np.arange(0, len(signal_df))/1000 # Create time vector <--- assumes 1000Hz sampling rate which is wrong. We used 100 Hz
-    df_old=df
-    df = df[df.RatingProvided == 1] #removing trials where no rating was provided
-    this_df = df[df.Modality=='Intero']
-    new_confidence, _ = discreteRatings(this_df.Confidence)  
-
-
-    for i, cond in enumerate(['Intero', 'Extero']):
-        this_df = df[df.Modality == cond].copy()
-        this_df['Stimuli'] = (this_df.responseBPM > this_df.listenBPM)
-        this_df['Responses'] = (this_df.Decision == 'More')
-        hits, misses, fas, crs = sdt.scores(data=this_df)
-        if hits==0 or crs==0:
-            d, c = np.nan, np.nan
-        else:
-            hr, far = sdt.rates(data=this_df,hits=hits, misses=misses, fas=fas, crs=crs)
-            d, c = sdt.dprime(data=this_df,hit_rate=hr, fa_rate=far), sdt.criterion(data=this_df,hit_rate=hr, fa_rate=far)
-            if to_print_subject:
-                print(f'Condition: {cond} - d-prime: {d:.2f} - criterion: {c:.2f}')
-        r[cond]['dprime']=d
-        r[cond]['criterion']=c
-
-
-
-    sns.set_context('talk')
-    fig, axs = plt.subplots(2, 2, figsize=(13, 5))
-    for i, cond in enumerate(['Intero', 'Extero']):
-        this_df = df[df.Modality == cond]
-        this_df = this_df[~this_df.Confidence.isnull()]
-
-        new_confidence, _ = discreteRatings(this_df.Confidence) # discretize confidence ratings into 4 bins
-        this_df['Confidence'] = new_confidence
-        this_df['Stimuli'] = (this_df.Alpha > 0).astype('int')
-        this_df['Responses'] = (this_df.Decision == 'More').astype('int')
-        nR_S1, nR_S2 = trials2counts(data=this_df)
-        plot_confidence(nR_S1, nR_S2, ax=axs[0,i])
-        axs[0,i].set_title(f'{cond} condition')
-
-
-        roc_auc = this_df.roc_auc(nRatings=4)
-        from metadpy.plotting import plot_roc
-        plot_roc(nR_S1, nR_S2, ax=axs[1,i])
-        print(f'roc auc for {cond} is {roc_auc:.2f}')
-
-        from metadpy.mle import metad
-        z=metad(data=this_df,nRatings=4,stimuli='Stimuli',accuracy='Accuracy',confidence='Confidence',verbose=0) #estimate meta dprime using MLE
-        meta_d = z['meta_d'][0]
-        m_ratio = z['m_ratio'][0]
-        
-
-
-        plt.show(block=False)
-        assert(0)
-    '''
-
-
-    #outcomes,durations = amyhrd_utils.get_outcomes('015',to_print_subject=True,to_plot_subject=False) #015 has dramatic threshold, 073 weird confidences
-
-
+    """
+    Get data tables, returning the following
+    df: each row is a single trial of a subject. Subjects are concatenated vertically. Contains trial-wise measures
+    t: each row is the entire data for a single subject. Contains summary measures.
+    """
+    df=[]  #list of dataframes, one for each subject
     t['use_hrd'] = ((include) & (t.valid_hrdo==1)) #those subjects whose HRD data we will use
     if load_table:
+        df = pd.read_csv(f'{temp_folder}\\outcomes_myhrd_df.csv')
         t = pd.read_csv(f'{temp_folder}\\outcomes_myhrd.csv')
     else:
-        for i in range(t.shape[0]): 
+        for i in range(t.shape[0]): #t.shape[0]
             if t.use_hrd[i]:
                 print(subs[i])
-                outcomes, task_duration = amyhrd_utils.get_outcomes(subs[i],to_print_subject,to_plot_subject)
+                outcomes, task_duration, df_subject = amyhrd_utils.get_outcomes(subs[i],to_print_subject,to_plot_subject)
+
+                #save dictionary 'outcomes' to file
+                import pickle
+                with open(f'{temp_folder}\\outcomes_myhrd\\{subs[i]}_outcomes.pkl', 'wb') as f:
+                    pickle.dump(outcomes, f)
+
+
+                df.append(df_subject)
                 for cond in ['Intero','Extero']:
                     for j in outcomes[cond].keys():
                         t.loc[i,f'hrd_{cond}_{j}']=outcomes[cond][j]
+        df = pd.concat(df) 
+        df.to_csv(f'{temp_folder}\\outcomes_myhrd_df.csv')
         t.to_csv(f'{temp_folder}\\outcomes_myhrd.csv')
+    print(f'Done loading data at {clock.time()[1]}')
+
+
+    assert(0)
+
+
+    #Make a new group column with two groups (hc and PT) in both t and df
+    t['group03'] = '' 
+    df['group03'] = '' 
+    for i in range(len(t)):
+        record_id = t.record_id[i]
+        if hc[i]: 
+            t.at[i,'group03'] = 'hc'
+            df.loc[df.Subject==record_id,'group03'] = 'hc'
+        elif eval(PT)[i]: 
+            t.at[i,'group03'] = PT
+            df.loc[df.Subject==record_id,'group03'] = PT
+    #df = df[(df.group03=='hc') | (df.group03==PT)] #only include subjects in the two groups of interest
+
+
+
+    #Fitting metacognition at group level with MLE. Based on https://colab.research.google.com/github/embodied-computation-group/metadpy/blob/master/docs/source/examples/Example%201%20-%20Fitting%20MLE%20-%20Subject%20and%20group%20level.ipynb#scrollTo=recognized-testament
+    from metadpy.mle import metad
+    from metadpy.utils import discreteRatings
+    print(f'Metacognition group level MLE start: {clock.time()[1]}')
+    pd.options.mode.chained_assignment = None  # default='warn' 
+    this_df = df[(df.HeartRateOutlier==False) & (~df.Confidence.isnull())]
+    new_confidence, _ = discreteRatings(this_df.Confidence) # discretize confidence ratings into 4 bins
+    this_df['Confidence'] = new_confidence
+    this_df['Stimuli'] = (this_df.Alpha > 0).astype('int')
+    this_df['Responses'] = (this_df.Decision == 'More').astype('int')
+    this_df['Accuracy']= this_df['Stimuli']==this_df['Responses']
+    group_fit = metad(data=this_df, nRatings=4, stimuli="Stimuli", accuracy="Accuracy", confidence="Confidence", subject="Subject", padding=True, between="group03", within="Modality") 
+    for i in range(len(group_fit)): #Enter values into dataframe t
+        series = group_fit.iloc[i]
+        modality = series['Modality']
+        record_id = series['Subject']
+        meta_d_groupMLE = series['meta_d']
+        m_ratio_groupMLE = series['m_ratio']
+        t.loc[t.record_id==record_id,f'hrd_{modality}_meta_d_groupMLE'] = meta_d_groupMLE
+        t.loc[t.record_id==record_id,f'hrd_{modality}_m_ratio_groupMLE'] = m_ratio_groupMLE
+    print(f'Metacognition group level MLE done: {clock.time()[1]}')
+
+    """
+    #Fitting psychometric function group level, based on https://colab.research.google.com/github/embodied-computation-group/Cardioception/blob/master/docs/source/examples/psychophysics/2-psychophysics_group_level.ipynb#scrollTo=FOedFUWQcWHc
+    import pytensor.tensor as pt
+    import arviz as az
+    import pymc as pm
+    this_df = df[(df.HeartRateOutlier==False) & (df.Modality=='Intero')]
+    this_df = this_df[['Alpha', 'Decision','Subject']]
+    nsubj = this_df.Subject.nunique()
+    x_total, n_total, r_total, sub_total = [], [], [], []
+    for i, sub in enumerate(this_df.Subject.unique()):
+        sub_df = this_df[this_df.Subject==sub]
+        x, n, r = np.zeros(163), np.zeros(163), np.zeros(163)
+        for ii, intensity in enumerate(np.arange(-40.5, 41, 0.5)):
+            x[ii] = intensity
+            n[ii] = sum(sub_df.Alpha == intensity)
+            r[ii] = sum((sub_df.Alpha == intensity) & (sub_df.Decision == "More"))
+        # remove no responses trials
+        validmask = n != 0
+        xij, nij, rij = x[validmask], n[validmask], r[validmask]
+        sub_vec = [i] * len(xij)
+        x_total.extend(xij)
+        n_total.extend(nij)
+        r_total.extend(rij)
+        sub_total.extend(sub_vec)
+    with pm.Model() as group_psychophysics:
+        mu_alpha = pm.Uniform("mu_alpha", lower=-50, upper=50)
+        sigma_alpha = pm.HalfNormal("sigma_alpha", sigma=100)
+        mu_beta = pm.Uniform("mu_beta", lower=0, upper=100)
+        sigma_beta = pm.HalfNormal("sigma_beta", sigma=100)
+        alpha = pm.Normal("alpha", mu=mu_alpha, sigma=sigma_alpha, shape=nsubj)
+        beta = pm.Normal("beta", mu=mu_beta, sigma=sigma_beta, shape=nsubj)
+        thetaij = pm.Deterministic(
+            "thetaij", amyhrd_utils.cumulative_normal(x_total, alpha[sub_total], beta[sub_total])
+        )
+        rij_ = pm.Binomial("rij", p=thetaij, n=n_total, observed=r_total)
+    with group_psychophysics:
+        idata = pm.sample(chains=4, cores=10)
+    az.plot_trace(idata, var_names=["mu_alpha", "alpha"])
+    stats = az.summary(idata, var_names=["mu_alpha", "mu_beta"])
+    print(stats.loc['mu_alpha','mean'])
+    print(stats.loc['mu_alpha','hdi_3%'])
+    print(stats.loc['mu_alpha','hdi_97%'])
+    """
+
+
+
 
     #t=acommonfuncs.add_table(t,'outcomes_cface.csv')
-
-    t['group03'] = '' #make a new group column with two groups: hc and PT
-    for i in range(len(t)):
-        if hc[i]: t.at[i,'group03'] = 'hc'
-        elif eval(PT)[i]: t.at[i,'group03'] = PT
 
     """
     r: Outer level keys are 'Intero', 'Extero'. Inner level keys are quality measures (Q_wrong_decisions_took_longer, Q_wrong_decisions_lower_confidence, Q_confidence_occurence_max, Q_HR_outlier_perc), SDT measures (dprime, criterion), psychophysics measures (threshold, slope), HR measures (bpm_mean, RR_std,RMSSD) (HR not present for Extero condition)

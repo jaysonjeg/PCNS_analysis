@@ -15,6 +15,15 @@ from scipy.stats import spearmanr, pearsonr, mannwhitneyu, ttest_ind, zscore
 from sklearn.linear_model import LinearRegression, TheilSenRegressor
 from acommonvars import *
 
+#Imports for single-=subject psychometric functions
+import pytensor.tensor as pt
+import arviz as az
+import pymc as pm
+
+def cumulative_normal(x, alpha, beta):
+    # Cumulative distribution function for the standard normal distribution
+    return 0.5 + 0.5 * pt.erf((x - alpha) / (beta * pt.sqrt(2)))
+
 def get_outliers(t,this_df,outlier_in_subset):
     outliers_record_ids = this_df[outlier_in_subset].values
     not_outliers = np.array([True]*len(t))
@@ -22,8 +31,6 @@ def get_outliers(t,this_df,outlier_in_subset):
         index = this_df[this_df==record_id].index[0] #index of this record_id in t
         not_outliers[index]=False   
     return not_outliers
-
-
 
 def compare(t,subgroup1,subgroup2,column,include_these=None,to_plot_compare=False):
     """
@@ -81,30 +88,70 @@ def scatter(t,group1,group2,column_name1,column_name2,robust=True,include_these=
     ax.legend([group1,group2])
     fig.tight_layout()
 
-def get_outcomes(subject,to_print_subject,to_plot_subject):
 
-    """
-    Analyse myHRD data for one subject and return outcome measures in a dictionary of dictionaries r. 
-    """
-
-    r={'Intero':{},'Extero':{}} #stores outcome measures for this subject
+def _get_data_files(subject,data_folder):
     contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\HRD*")
     assert(len(contents)==1)
     resultsFolder=contents[0]
-
     df=pd.read_csv(glob(f"{resultsFolder}\\*final.txt")[0]) # Logs dataframe
     interoPost=np.load(glob(f"{resultsFolder}\\*Intero_posterior.npy")[0]) # History of posteriors distribution
     exteroPost=np.load(glob(f"{resultsFolder}\\*Extero_posterior.npy")[0])
     signal_df=pd.read_csv(glob(f"{resultsFolder}\\*signal.txt")[0]) # PPG signal
-
     signal_df['Time'] = np.arange(0, len(signal_df))/1000 # Create time vector <--- assumes 1000Hz sampling rate which is wrong. We used 100 Hz
+    return df,interoPost,exteroPost,signal_df
 
+def get_outcomes(subject,to_print_subject,to_plot_subject):
+
+    """
+    Analyse myHRD data for one subject and return single-value outcome measures for each subject in a dictionary of dictionaries r. 
+    Also return the subject's entire trial-by-trial dataframe df, with additional column for 'Subject' and 'HeartRateOutlier'
+    """
+    pd.options.mode.chained_assignment = None  # default='warn'    
+    r={'Intero':{},'Extero':{}} #stores outcome measures for this subject
+
+    df,interoPost,exteroPost,signal_df = _get_data_files(subject,data_folder)
     df_old=df
     df = df[df.RatingProvided == 1] #removing trials where no rating was provided
-    this_df = df[df.Modality=='Intero']
-    sum(this_df.TrialType == 'psi'), sum(this_df.TrialType == 'CatchTrial'), sum(this_df.TrialType == 'UpDown')
+    df['Subject'] = subject
+    df['HeartRateOutlier'] = False  
 
-    ### Get outcome measures and put them into r ###
+    #### Get PPG data and calculate heart rate
+    drop, RR_list, RRdiff_list, bpm_df = [], [], [], pd.DataFrame([]) #bpm_df will contain the sequence of all bpms (using RR intervals)
+    for i, trial in enumerate(signal_df.nTrial.unique()):
+        color = '#c44e52' if (i % 2) == 0 else '#4c72b0'
+        this_df = signal_df[signal_df.nTrial==trial]  # Get single trial's PPG data. Downsample to save memory
+        signal, peaks = oxi_peaks(this_df.signal, sfreq=1000) 
+        bpm = 60000/np.diff(np.where(peaks)[0]) #calculate each RR interval and convert to bpm. Each trial will have about 5 of these
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=FutureWarning)
+            bpm_df = bpm_df.append(pd.DataFrame({'bpm': bpm, 'nEpoch': i, 'nTrial': trial}))
+        RR = np.diff(np.where(peaks)[0]) #RR intervals (ms)
+        RR_list += list(RR)
+        RRdiff = np.diff(RR) #difference between consecutive RR intervals (ms)
+        RRdiff_list += list(RRdiff)
+    r['Intero']['bpm_mean'] = bpm_df.bpm.mean()
+    r['Intero']['bpm_std'] = bpm_df.bpm.std()
+    r['Intero']['RR_std'] = np.std(RR_list)
+    r['Intero']['RMSSD'] = np.sqrt(np.mean(np.square(RRdiff_list))) #root mean square of successive differences between RR intervals
+
+    #### Check for outliers in the absolute value of RR intervals 
+    for e, j in zip(bpm_df.nEpoch[pg.madmedianrule(bpm_df.bpm.to_numpy())].unique(),
+                    bpm_df.nTrial[pg.madmedianrule(bpm_df.bpm.to_numpy())].unique()):
+        drop.append(e)
+        df.loc[j, 'HeartRateOutlier'] = True
+    # Check for outliers in the standard deviation values of RR intervals 
+    for e, j in zip(np.arange(0, bpm_df.nTrial.nunique())[pg.madmedianrule(bpm_df.copy().groupby(['nTrial', 'nEpoch']).bpm.std().to_numpy())],
+                    bpm_df.nTrial.unique()[pg.madmedianrule(bpm_df.copy().groupby(['nTrial', 'nEpoch']).bpm.std().to_numpy())]):
+        if e not in drop:
+            drop.append(e)
+            df.loc[j, 'HeartRateOutlier'] = True
+    r['Intero']['Q_HR_outlier_perc'] = len(drop)/bpm_df.nEpoch.nunique() #percentage of outlier HR values (trial-wise average)
+    #Dataframe 'df' is not altered from here until end of function
+     
+
+    ##### Get outcome measures and put them into r  #####
+
+    ### Quality Checks
     #Quality check 1: check that mean response time for incorrect trials is greater than for correct trials
     for cond in ['Intero','Extero']: 
         wrong_decisions_took_longer = df.loc[(df.Modality==cond) & (df.ResponseCorrect==True) , 'DecisionRT'].mean() < df.loc[(df.Modality==cond) & (df.ResponseCorrect==False) , 'DecisionRT'].mean() 
@@ -117,7 +164,6 @@ def get_outcomes(subject,to_print_subject,to_plot_subject):
     for cond in ['Intero','Extero']:
         r[cond]['Q_wrong_decisions_lower_confidence'] = df.loc[(df.Modality==cond) & (df.ResponseCorrect==True) , 'Confidence'].mean() > df.loc[(df.Modality==cond) & (df.ResponseCorrect==False) , 'Confidence'].mean()
     #Quality check 4: Confidence ratings have a good range (i.e. not all 1s or 4s). Outputs the proportion of trials with the most frequent confidence rating  
-
     for cond in ['Intero','Extero',]:
         this_df = df[df.Modality == cond]
         this_df = this_df[~this_df.Confidence.isnull()]
@@ -127,6 +173,87 @@ def get_outcomes(subject,to_print_subject,to_plot_subject):
             r[cond]['Q_confidence_occurence_max'] = occurence_proportions_max
         except:
             r[cond]['Q_confidence_occurence_max'] = np.nan
+
+    ### Psychometric function
+
+    #Final estimates of threshold and slope
+    for cond in ['Intero','Extero']: 
+        this_df = df[(df.Modality == cond) & (df.TrialType == 'psi')]
+        threshold, slope = this_df.EstimatedThreshold.iloc[-1], this_df.EstimatedSlope.iloc[-1] 
+        r[cond]['threshold_psi']=threshold
+        r[cond]['slope_psi']=slope
+    #Fitting psychometric function at single subject level. Takes 60s per modality. Based on https://colab.research.google.com/github/embodied-computation-group/Cardioception/blob/master/docs/source/examples/psychophysics/1-psychophysics_subject_level.ipynb#scrollTo=GWMGsEDSzosM
+    
+    for cond in ['Intero','Extero']:
+        this_df = df[(df.Subject==subject) & (df.HeartRateOutlier==False) & (df.Modality==cond)] #exclude HR outlier trials
+        this_df = this_df[['Alpha', 'Decision']]
+        x, n, R = np.zeros(163), np.zeros(163), np.zeros(163)
+        for ii, intensity in enumerate(np.arange(-40.5, 41, 0.5)):
+            x[ii] = intensity
+            n[ii] = sum(this_df.Alpha == intensity)
+            R[ii] = sum((this_df.Alpha == intensity) & (this_df.Decision == "More"))
+        # remove no responses trials
+        validmask = n != 0
+        xij, nij, rij = x[validmask], n[validmask], R[validmask]
+        with pm.Model() as subject_psychophysics:
+            alpha = pm.Uniform("alpha", lower=-40.5, upper=40.5)
+            beta = pm.HalfNormal("beta", 10)
+            thetaij = pm.Deterministic(
+                "thetaij", cumulative_normal(xij, alpha, beta)
+            )
+            rij_ = pm.Binomial("rij", p=thetaij, n=nij, observed=rij)
+        #pm.model_to_graphviz(subject_psychophysics)
+        try:
+            with subject_psychophysics:
+                idata = pm.sample(chains=4, cores=10)
+        except: 
+            print('Error: in fitting psychometric function single subject')
+        #az.plot_trace(idata, var_names=['alpha', 'beta'])
+        stats = az.summary(idata, ["alpha", "beta"])
+        alpha = stats.loc['alpha','mean']
+        beta = stats.loc['beta','mean']
+        r[cond]['threshold_Bay']=alpha
+        r[cond]['slope_Bay']=beta
+    
+    ### Metacognition
+
+
+    #Metacognition, single subject, MLE and Bayesian. https://colab.research.google.com/github/embodied-computation-group/metadpy/blob/master/docs/source/examples/Example%201%20-%20Fitting%20MLE%20-%20Subject%20and%20group%20level.ipynb#scrollTo=recognized-testament
+    for i, cond in enumerate(['Intero', 'Extero']):
+        this_df = df[(df.Modality == cond) & (df.HeartRateOutlier==False)]
+        this_df = this_df[~this_df.Confidence.isnull()]
+        gotDiscreteRatings = True
+        try:
+            new_confidence, _ = discreteRatings(this_df.Confidence) # discretize confidence ratings into 4 bins
+            this_df['Confidence'] = new_confidence
+            this_df['Stimuli'] = (this_df.Alpha > 0).astype('int')
+            this_df['Responses'] = (this_df.Decision == 'More').astype('int')
+        except:
+            print(f"Error: {cond} Metacognition: single subject: discreteRatings")
+            gotDiscreteRatings=False
+        if gotDiscreteRatings:
+            try: #Option 1: MLE method
+                z=metad(data=this_df,nRatings=4,stimuli='Stimuli',accuracy='Accuracy',confidence='Confidence',verbose=0) 
+                r[cond]['meta_d_MLE']=z['meta_d'][0]
+                r[cond]['m_ratio_MLE']=z['m_ratio'][0]
+                r[cond]['roc_auc_MLE']=this_df.roc_auc(nRatings=4)
+            except:
+                print(f"Error: {cond} Metacognition: single subject: MLE")
+        if gotDiscreteRatings:
+            try: #Option 2: Bayesian method (120s per modality)          
+                from metadpy.bayesian import hmetad
+                model, trace = hmetad(
+                data=this_df, nRatings=4, stimuli='Stimuli',
+                accuracy='Accuracy', confidence='Confidence',cores=10
+                )
+                dprime_Bay = az.summary(trace).loc['d1','mean']
+                meta_d_Bay = az.summary(trace).loc['meta_d','mean']
+                m_ratio_Bay = meta_d_Bay / dprime_Bay
+                r[cond]['dprime_Bay']=dprime_Bay
+                r[cond]['meta_d_Bay']=meta_d_Bay
+                r[cond]['m_ratio_Bay']=m_ratio_Bay     
+            except:
+                print(f"Error: {cond} Metacognition: single subject: Bayesian")
 
 
     """
@@ -143,41 +270,11 @@ def get_outcomes(subject,to_print_subject,to_plot_subject):
             hr, far = sdt.rates(data=this_df,hits=hits, misses=misses, fas=fas, crs=crs)
             d, c = sdt.dprime(data=this_df,hit_rate=hr, fa_rate=far), sdt.criterion(data=this_df,hit_rate=hr, fa_rate=far)
             if to_print_subject:
-                print(f'Condition: {cond} - d-prime: {d} - criterion: {c}')
+                print(f'Condition: {cond} - d-prime: {d:.2f} - criterion: {c:.2f}')
         r[cond]['dprime']=d
         r[cond]['criterion']=c
-    #final estimates of threshold and slope
-    for cond in ['Intero','Extero']: 
-        this_df = df[(df.Modality == cond) & (df.TrialType == 'psi')]
-        threshold, slope = this_df.EstimatedThreshold.iloc[-1], this_df.EstimatedSlope.iloc[-1] 
-        r[cond]['threshold']=threshold
-        r[cond]['slope']=slope
 
-    #Metacognition
-    for i, cond in enumerate(['Intero', 'Extero']):
-        this_df = df[df.Modality == cond]
-        this_df = this_df[~this_df.Confidence.isnull()]
-        try:
-            new_confidence, _ = discreteRatings(this_df.Confidence) # discretize confidence ratings into 4 bins
-            this_df['Confidence'] = new_confidence
-            this_df['Stimuli'] = (this_df.Alpha > 0).astype('int')
-            this_df['Responses'] = (this_df.Decision == 'More').astype('int')
-            nR_S1, nR_S2 = trials2counts(data=this_df)
-            z=metad(data=this_df,nRatings=4,stimuli='Stimuli',accuracy='Accuracy',confidence='Confidence',verbose=0) #estimate meta dprime using MLE
-            r[cond]['meta_d']=z['meta_d'][0]
-            r[cond]['m_ratio']=z['m_ratio'][0]
-            r[cond]['roc_auc']=this_df.roc_auc(nRatings=4)
-            """
-            from metadpy.bayesian import hmetad
-            import arviz as az
-            model, trace = hmetad(
-            data=this_df, nRatings=4, stimuli='Stimuli',
-            accuracy='Accuracy', confidence='Confidence'
-            )
-            metad_bayesian = az.summary(trace).loc['meta_d','mean']
-            """
-        except:
-            print('Error in getting metacognition')
+    ### Plots
 
     if to_plot_subject:
         #Figure 1. Response times for Intero, Extero x Correct or Incorrect responses - for decision-making and confidence rating
@@ -363,42 +460,6 @@ def get_outcomes(subject,to_print_subject,to_plot_subject):
         plt.legend()
         sns.despine()
 
-    #### Get PPG data and calculate heart rate
-    drop, RR_list, RRdiff_list, bpm_df = [], [], [], pd.DataFrame([]) #bpm_df will contain the sequence of all bpms (using RR intervals)
-    clean_df = df.copy()
-    clean_df['HeartRateOutlier'] = np.zeros(len(clean_df), dtype='bool')
-    for i, trial in enumerate(signal_df.nTrial.unique()):
-        color = '#c44e52' if (i % 2) == 0 else '#4c72b0'
-        this_df = signal_df[signal_df.nTrial==trial]  # Get single trial's PPG data. Downsample to save memory
-        
-        signal, peaks = oxi_peaks(this_df.signal, sfreq=1000) 
-        bpm = 60000/np.diff(np.where(peaks)[0]) #calculate each RR interval and convert to bpm. Each trial will have about 5 of these
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=FutureWarning)
-            bpm_df = bpm_df.append(pd.DataFrame({'bpm': bpm, 'nEpoch': i, 'nTrial': trial}))
-        RR = np.diff(np.where(peaks)[0]) #RR intervals (ms)
-        RR_list += list(RR)
-        RRdiff = np.diff(RR) #difference between consecutive RR intervals (ms)
-        RRdiff_list += list(RRdiff)
-
-    r['Intero']['bpm_mean'] = bpm_df.bpm.mean()
-    r['Intero']['bpm_std'] = bpm_df.bpm.std()
-    r['Intero']['RR_std'] = np.std(RR_list)
-    r['Intero']['RMSSD'] = np.sqrt(np.mean(np.square(RRdiff_list))) #root mean square of successive differences between RR intervals
-
-    # Check for outliers in the absolute value of RR intervals 
-    for e, j in zip(bpm_df.nEpoch[pg.madmedianrule(bpm_df.bpm.to_numpy())].unique(),
-                    bpm_df.nTrial[pg.madmedianrule(bpm_df.bpm.to_numpy())].unique()):
-        drop.append(e)
-        clean_df.loc[j, 'HeartRateOutlier'] = True
-    # Check for outliers in the standard deviation values of RR intervals 
-    for e, j in zip(np.arange(0, bpm_df.nTrial.nunique())[pg.madmedianrule(bpm_df.copy().groupby(['nTrial', 'nEpoch']).bpm.std().to_numpy())],
-                    bpm_df.nTrial.unique()[pg.madmedianrule(bpm_df.copy().groupby(['nTrial', 'nEpoch']).bpm.std().to_numpy())]):
-        if e not in drop:
-            drop.append(e)
-            clean_df.loc[j, 'HeartRateOutlier'] = True
-    r['Intero']['Q_HR_outlier_perc'] = len(drop)/bpm_df.nEpoch.nunique() #percentage of outlier HR values (trial-wise average)
-
     if to_plot_subject:
         """
         Figure 8. Plots of PPG. Top plot shows PPG. Bottom shows instantaneous HR. Each dot is one RR interval. Each cluster of dots is one trial (5 sec). Gray shade is outliers
@@ -454,4 +515,4 @@ def get_outcomes(subject,to_print_subject,to_plot_subject):
     if to_plot_subject: plt.show(block=False)
     
     task_duration = df_old.RatingEnds[df_old.shape[0]-1] - df_old.StartListening[0]
-    return r, task_duration
+    return r, task_duration, df
