@@ -32,6 +32,18 @@ def get_outliers(t,this_df,outlier_in_subset):
         not_outliers[index]=False   
     return not_outliers
 
+def from_bool_in_t_get_bool_in_df(t,df,bool_in_t):
+    #Given a boolean column in t, make a list of all the record_ids of True rows. Then return a boolean column in df with True rows where Subject column value is in the record_id list. Returned array can be used to index df
+    record_ids = t.record_id[bool_in_t].values
+    return df.Subject.isin(record_ids)
+    """
+    to_include = np.array([False]*len(df))
+    for i in range(len(to_include)):
+        if df.Subject.values[i] in record_ids:
+            to_include[i] = True
+    return to_include
+    """
+
 def compare(t,subgroup1,subgroup2,column,include_these=None,to_plot_compare=False):
     """
     Plot strip-plot of sample values in each group. Compare sample means with t-test and p-value. Also return bootstrapped confidence intervals (robust to outliers)
@@ -89,7 +101,7 @@ def scatter(t,group1,group2,column_name1,column_name2,robust=True,include_these=
     fig.tight_layout()
 
 
-def _get_data_files(subject,data_folder):
+def get_data_files(subject,data_folder):
     contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\HRD*")
     assert(len(contents)==1)
     resultsFolder=contents[0]
@@ -100,25 +112,24 @@ def _get_data_files(subject,data_folder):
     signal_df['Time'] = np.arange(0, len(signal_df))/1000 # Create time vector <--- assumes 1000Hz sampling rate which is wrong. We used 100 Hz
     return df,interoPost,exteroPost,signal_df
 
-def get_outcomes(subject,to_print_subject,to_plot_subject):
+def get_task_duration(subject):
+    #Return task duration (seconds) for the subject
+    df_old,_,_,_ = get_data_files(subject,data_folder)
+    task_duration = df_old.RatingEnds[df_old.shape[0]-1] - df_old.StartListening[0]
+    return task_duration
 
+def get_trialwise_outcomes(subject):
     """
-    Analyse myHRD data for one subject and return single-value outcome measures for each subject in a dictionary of dictionaries r. 
-    Also return the subject's entire trial-by-trial dataframe df, with additional column for 'Subject' and 'HeartRateOutlier'
+    Get final.txt data for a single subject into dataframe. Exclude rows where rating was not provided, or where HR or standard deviation of HR was an outlier. Return data arrays containing beats per minute (bpm), RR intervals, and successive differences between RR intervals.
     """
     pd.options.mode.chained_assignment = None  # default='warn'    
-    r={'Intero':{},'Extero':{}} #stores outcome measures for this subject
-
-    df,interoPost,exteroPost,signal_df = _get_data_files(subject,data_folder)
-    df_old=df
+    df,interoPost,exteroPost,signal_df = get_data_files(subject,data_folder)
     df = df[df.RatingProvided == 1] #removing trials where no rating was provided
     df['Subject'] = subject
-    df['HeartRateOutlier'] = False  
-
+    df['HeartRateOutlier'] = False 
     #### Get PPG data and calculate heart rate
     drop, RR_list, RRdiff_list, bpm_df = [], [], [], pd.DataFrame([]) #bpm_df will contain the sequence of all bpms (using RR intervals)
     for i, trial in enumerate(signal_df.nTrial.unique()):
-        color = '#c44e52' if (i % 2) == 0 else '#4c72b0'
         this_df = signal_df[signal_df.nTrial==trial]  # Get single trial's PPG data. Downsample to save memory
         signal, peaks = oxi_peaks(this_df.signal, sfreq=1000) 
         bpm = 60000/np.diff(np.where(peaks)[0]) #calculate each RR interval and convert to bpm. Each trial will have about 5 of these
@@ -129,10 +140,6 @@ def get_outcomes(subject,to_print_subject,to_plot_subject):
         RR_list += list(RR)
         RRdiff = np.diff(RR) #difference between consecutive RR intervals (ms)
         RRdiff_list += list(RRdiff)
-    r['Intero']['bpm_mean'] = bpm_df.bpm.mean()
-    r['Intero']['bpm_std'] = bpm_df.bpm.std()
-    r['Intero']['RR_std'] = np.std(RR_list)
-    r['Intero']['RMSSD'] = np.sqrt(np.mean(np.square(RRdiff_list))) #root mean square of successive differences between RR intervals
 
     #### Check for outliers in the absolute value of RR intervals 
     for e, j in zip(bpm_df.nEpoch[pg.madmedianrule(bpm_df.bpm.to_numpy())].unique(),
@@ -145,9 +152,24 @@ def get_outcomes(subject,to_print_subject,to_plot_subject):
         if e not in drop:
             drop.append(e)
             df.loc[j, 'HeartRateOutlier'] = True
+
+    return df, bpm_df, RR_list, RRdiff_list, drop
+
+def get_outcomes(subject,to_print_subject,to_plot_subject):
+    """
+    Analyse myHRD data for one subject and return single-value outcome measures for each subject in a dictionary of dictionaries r. 
+    Also return the subject's entire trial-by-trial dataframe df, with additional column for 'Subject' and 'HeartRateOutlier'
+    """
+    pd.options.mode.chained_assignment = None  # default='warn'    
+    r={'Intero':{},'Extero':{}} #stores outcome measures for this subject
+
+    df_old,interoPost,exteroPost,signal_df = get_data_files(subject,data_folder)
+    df, bpm_df, RR_list, RRdiff_list, drop = get_trialwise_outcomes(subject)
+    r['Intero']['bpm_mean'] = bpm_df.bpm.mean()
+    r['Intero']['bpm_std'] = bpm_df.bpm.std()
+    r['Intero']['RR_std'] = np.std(RR_list)
+    r['Intero']['RMSSD'] = np.sqrt(np.mean(np.square(RRdiff_list))) #root mean square of successive differences between RR intervals
     r['Intero']['Q_HR_outlier_perc'] = len(drop)/bpm_df.nEpoch.nunique() #percentage of outlier HR values (trial-wise average)
-    #Dataframe 'df' is not altered from here until end of function
-     
 
     ##### Get outcome measures and put them into r  #####
 
@@ -514,5 +536,5 @@ def get_outcomes(subject,to_print_subject,to_plot_subject):
 
     if to_plot_subject: plt.show(block=False)
     
-    task_duration = df_old.RatingEnds[df_old.shape[0]-1] - df_old.StartListening[0]
-    return r, task_duration, df
+
+    return r
