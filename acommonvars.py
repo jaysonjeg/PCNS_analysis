@@ -36,19 +36,23 @@ elif os.environ['COMPUTERNAME']=='DESKTOP-EGSQF3A':
     pc='home'
     files_source='local' #'local' for local machine, or else 'NEWYSNG' for shared drive
 
+print(f'Running on {pc}. Data files in {files_source}')
+
 if pc=='laptop' and files_source=='NEWYSNG':
     #data_folder="Z:\\Shiami_DICOM\\Psychosis\\PCNS"
-    data_folder="Z:\\PCNS\\Data\\Data_raw\\per_subject"
-    temp_folder="Z:\\PCNS\\Data\\Data_analysis\\temp"
+    top_folder = "Z:\\NEWYSNG\\PCNS\\Data"
     redcap_file = "Z:\\PCNS\\Data\\CogEmotPsych_DATA_2023-06-16_0813.csv"
 elif pc=='home':
-    intermediates_folder='D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates'
     if files_source == 'NEWYSNG':
-        data_folder="Z:\\NEWYSNG\\Shiami_DICOM\\Psychosis\\PCNS"
+        top_folder = "Z:\\NEWYSNG\\PCNS\\Data"
     elif files_source == 'local':
-        data_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw"
-        temp_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_analysis\\temp"
+        top_folder = "D:\\FORSTORAGE\\Data\\Project_PCNS"
     redcap_file = "D:\\OneDrive - The University Of Newcastle\\Drive\PhD\\Project_PCNS\\BackupRedcap\\CogEmotPsych_DATA_2023-06-16_0813.csv"
+    intermediates_folder='D:\\FORSTORAGE\\Data\\Project_PCNS\\intermediates'
+
+data_folder = f"{top_folder}\\Data_raw\\per_subject"
+analysis_folder = f"{top_folder}\\Data_analysis"
+temp_folder = f"{analysis_folder}\\temp"
 
 '''
 data_folder="G:\\My Drive\\Share_Angelica\\Data_raw\\per_subject"
@@ -91,8 +95,12 @@ for i in range(len(t)):
     if sza[i]: t.at[i,'group01']='sza'
 t['group02']=''
 for i in range(len(t)):
-    if hc[i]: t.at[i,'group01']='hc'
-    else: t.at[i,'group01']='cc'
+    if hc[i]: t.at[i,'group02']='hc'
+    else: t.at[i,'group02']='cc'
+t['group03']=''
+for i in range(len(t)):
+    if hc[i]: t.at[i,'group03']='hc'
+    if sz[i]: t.at[i,'group03']='sz'
 
 hc_color='green'
 cc_color='brown'

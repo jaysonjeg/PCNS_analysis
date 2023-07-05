@@ -26,18 +26,20 @@ For fMRI, options are:
 
 import numpy as np, pandas as pd, matplotlib.pyplot as plt
 import acommonfuncs, acface_utils
+from acface_utils import ntrials, n_trialsperemotion, emots, relevant_timejitters, relevant_labels, relevant_timestamps, midpoint_timestamps
 from acommonvars import *
 from scipy.interpolate import interp1d
 c = acommonfuncs.clock()
 
 ### SETTABLE PARAMETERS ###
-target_fps=20
-ntrials=80
-n_trialsperemotion=40
-emots=['ha','an']
+
 static_or_dynamic = 'static' #whether au_static was used in OpenFace execution or not
 action_unit = 'AU12' #which action unit to plot
 min_success = 0.90 #minimum proportion of successful frames for a subject to be included
+
+target_fps=20
+
+t['use_cface'] = ((include) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #those subjects whose cface data we will use
 
 ha_AU='AU12'
 ha_AU_index = aus_labels.index(ha_AU)
@@ -49,17 +51,12 @@ get_latencies=True
 get_maxgrads=True
 to_plot=False #plots for each participant
 
-t['use_cface'] = ((include) & (t.valid_cfacei==1) & (t.valid_cfaceo==1)) #those subjects whose cface data we will use
+#We will later be getting AU time series for each trial, and resampling timestamps to be relative to trigger as 0, and at 20fps (target_fps). Here we get resampled per-trial timestamps
 
-#We will later be getting AU time series for each trial, and resampling timestamps to be relative to trigger as 0, and at 20fps (target_fps). Here we new resampled per-trial timestamps
-relevant_timejitters=[0,0.5,0.75,1.5,0.75,0.5] #(0, trigger, post_trigger, stimMove, fixation, next instruction)
-relevant_labels=['trigger','post_trigger','stimMove','fixation','next_instruct']
-relevant_timestamps = np.cumsum(relevant_timejitters)
-midpoint_timestamps = acface_utils.calculate_averages(relevant_timestamps)   
 times_trial_regular = np.arange(0,relevant_timestamps[-1],1/target_fps) #new timestamps for resampling
 
 def get_outcomes(subject):
-    print(c.time()[1])
+    print(f'{c.time()[1]}: sub {subject}')
     all_frames,aus,success = acommonfuncs.get_openface_table('cface1',subject,static_or_dynamic) #Get the OpenFace intermediates .csv for this subject
 
     webcam_frames_success_proportion = np.sum(success)/len(success)
@@ -123,6 +120,7 @@ def get_outcomes(subject):
         #PCA of action unit time series for each emotion separately
         pca,comp0,aus_pca,aus_trial_pca,aust_pca,aus_trial_pca_mean,aus_trial_pca_mean2={},{},{},{},{},{},{}
         for emot in emots:
+
             pca[emot] = acface_utils.get_pca(aus_trial[emot])
             if not(acface_utils.pca_comp0_direction_correct(target_fps,aus_trial_mean[emot],pca[emot])):
                 pca[emot].components_[0] = -pca[emot].components_[0] #ensure component zero increases from trigger to middle of stimMove
@@ -130,8 +128,8 @@ def get_outcomes(subject):
             aus_trial_pca[emot] = np.array([pca[emot].transform(i) for i in aus_trial[emot]]) 
             aus_trial_pca_mean[emot] = pca[emot].transform(aus_trial_mean[emot]) #OUTCOME mean_ts_pca
             aus_trial_pca_mean2[emot] = pca[emot].transform(aus_trial_mean2[emot])
-            aus_pca[emot] = acface_utils.pca_transform(pca[emot],aus) 
-            aust_pca[emot] = acface_utils.pca_transform(pca[emot],aust) 
+            aus_pca[emot] = acface_utils.pca_transform(pca[emot],aus.values) 
+            aust_pca[emot] = acface_utils.pca_transform(pca[emot],aust.values) 
         #interp_aus_pca = interp1d(times_eachframe,aus_pca['ha'],axis=0,kind='linear',fill_value = 'extrapolate')  
         assert(acface_utils.pca_comp0_direction_correct(target_fps,aus_trial_mean[emot],pca[emot]))
 
@@ -192,9 +190,12 @@ def get_outcomes(subject):
     return {'amp_max':ha_AU_trial_ha_max, 'amp_range':ha_AU_trial_ha_range,'mean_ts': aus_trial_mean,'mean_ts_pca':aus_trial_pca_mean, 'other_metrics':other_metrics}
     #return ha_AU_trial_ha_max
 
-load_table=False
+load_table=True
 if load_table:
-    t = pd.read_csv(f'{temp_folder}\\outcomes_cface.csv')
+    t = pd.read_csv(f'{temp_folder}\\outcomes_cface_face.csv')
+    #When csv is saved, elements which are lists are saved as strings. We need to convert them back to lists.
+    t = acommonfuncs.str_columns_to_literals(t,['cface_mean_ts_ha_pca0','cface_mean_ts_an_pca0','cface_mean_ts_ha_au12'])
+
 else:
     t=acommonfuncs.add_columns(t,['cface_mean_ts_ha_pca0','cface_mean_ts_an_pca0','cface_mean_ts_ha_au12'])
     t=acommonfuncs.add_columns(t,['cface_latencies_ha','cface_durations_ha','cface_latencies_an','cface_durations_an'])
@@ -211,9 +212,9 @@ else:
                 t.at[i,'cface_amp_range_mean'] = np.mean(outcomes['amp_range'])
                 t.at[i,'cface_amp_max_slope'] = acface_utils.get_slope(outcomes['amp_max'])
 
-                t.at[i,'cface_mean_ts_ha_pca0'] = outcomes['mean_ts_pca']['ha'][:,0]
-                t.at[i,'cface_mean_ts_an_pca0'] = outcomes['mean_ts_pca']['an'][:,0]
-                t.at[i,'cface_mean_ts_ha_au12'] = outcomes['mean_ts']['ha'][:,ha_AU_index]
+                t.at[i,'cface_mean_ts_ha_pca0'] = list(outcomes['mean_ts_pca']['ha'][:,0])
+                t.at[i,'cface_mean_ts_an_pca0'] = list(outcomes['mean_ts_pca']['an'][:,0])
+                t.at[i,'cface_mean_ts_ha_au12'] = list(outcomes['mean_ts']['ha'][:,ha_AU_index])
                 
                 r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(outcomes['other_metrics']['ha'],n_trialsperemotion)
                 t.at[i,'cface_latencies_validperc_ha'] = r_validperc
@@ -232,7 +233,7 @@ else:
                 #acface_utils.plot_this_au_trial(outcomes['other_metrics']['an'],'an - comp0',times_trial_regular,relevant_timestamps,relevant_labels,midpoint_timestamps,plot_relevant_timestamps=False,results=outcomes['other_metrics']['an'])          
             else:
                 t.at[i,'cface_goodwebcam']=False
-        t.to_csv(f'{temp_folder}\\outcomes_cface.csv')
+        t.to_csv(f'{temp_folder}\\outcomes_cface_face.csv')
 
 
 import seaborn as sns
@@ -240,7 +241,7 @@ from scipy.stats import ttest_ind
 show_subs = (hc|sz) & t.use_cface
 
 def sns_plot(**kwargs):
-    sns.swarmplot(**kwargs,y='group01',alpha=0.5,palette=colors)#swarmplot, stripplot
+    sns.stripplot(**kwargs,y='group01',hue='group01',alpha=0.5,palette=colors)#swarmplot, stripplot
     sns.violinplot(**kwargs,y='group01',inner='box',cut=0,color='yellow')
 def pval(column_name):
     tstat,p=ttest_ind(t.loc[hc & t.use_cface,column_name].dropna(),t.loc[sz & t.use_cface,column_name].dropna())

@@ -35,6 +35,14 @@ def add_table(t,csv_file):
             t[col] = other_t[col]
     return t
 
+def str_columns_to_literals(t,columns):
+    #Given dataframe t, for all columns in 'columns', their elements will be a string representation of a list. Convert these back into lists
+    for column in columns:
+        for i in range(t.shape[0]):
+            element = t.at[i,column]
+            if type(element)==str:
+                t.at[i,column] = eval(element)
+    return t
 
 
     

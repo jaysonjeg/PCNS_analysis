@@ -60,13 +60,13 @@ if __name__=='__main__':
     load_t=True
     robust=True #robust statistical analyses, or otherwise usual analyses (pearson r, t-test)
 
-    PT = 'sz' #patient group: 'cc', 'sz'
+    PT = 'cc' #patient group: 'cc', 'sz'
     print(f'Analyses below compare hc with {PT}')
 
     psychometric_type = 'Bay' #psi or Bay
     metacog_type = 'Bay' #MLE or Bay
 
-    intero_adjust_method = 'regress_extero' #'regress_extero', 'add7', 'none'
+    intero_adjust_method = 'none' #'regress_extero', 'add7', 'none'
     print(f'Adjusting interoceptive thresholds by {intero_adjust_method}')
 
     outlier_method = 'zscore' #'zscore' or 'madmedianrule'
@@ -258,9 +258,21 @@ if __name__=='__main__':
     Q_Extero_not_outliers = amyhrd_utils.get_outliers(t,t.loc[t.use_hrd & (hc|eval(PT)),'record_id'],Q_Extero_out)
     """
 
+    """
+    print('Optional: Convert psychometric measures to a percentage of subject-specific HR. Multiply by 70 so the result looks like a BPM value')
+    def divided_by_HR(column):
+        #In dataframe t, replace divide values in column by the subject's HR. Then multiply all subjects' values by a common number (mean HR across all subjects).
+        t.loc[t.use_hrd,column] = t.loc[t.use_hrd,'hrd_Intero_bpm_mean'].mean() * t.loc[t.use_hrd,column] / t.loc[t.use_hrd,'hrd_Intero_bpm_mean']
+    divided_by_HR('hrd_Intero_threshold')
+    divided_by_HR('hrd_Extero_threshold')
+    divided_by_HR('hrd_Intero_slope')
+    divided_by_HR('hrd_Extero_slope')
+    """
+    
+    #t.loc[t.use_hrd,'hrd_Intero_threshold'] = 70 * t.loc[t.use_hrd,'hrd_Intero_threshold'] / t.loc[t.use_hrd,'hrd_Intero_bpm_mean']
 
     #Use robust regression to predict interoceptive thresholds from exteroceptive thresholds
-    x = t.loc[t.use_hrd & not_outliers,'hrd_Extero_threshold']
+    x = t.loc[t.use_hrd & not_outliers,'hrd_Extero_threshold'] #'hrd_Extero_threshold'
     y = t.loc[t.use_hrd & not_outliers,'hrd_Intero_threshold']
     xnew = np.linspace(min(x),max(x),100)
     reg = TheilSenRegressor().fit(x.values.reshape(-1,1),y.values)
@@ -285,6 +297,20 @@ if __name__=='__main__':
     t['hrd_Extero_threshold_abs'] = np.abs(t.hrd_Extero_threshold)
     t['hrd_Intero_threshold_adj_abs'] = np.abs(t.hrd_Intero_threshold_adj)
 
+    #print('Optional: Find the relationship between HR and adjusted interoceptive |threshold| in controls alone. Regress this relationship out of all adjusted interoceptive |thresholds|')
+    """
+    x = t.loc[t.use_hrd & not_outliers & hc, 'hrd_Intero_bpm_mean']
+    y = t.loc[t.use_hrd & not_outliers & hc, 'hrd_Intero_threshold_adj_abs']
+    reg = TheilSenRegressor().fit(x.values.reshape(-1,1),y.values)
+    ynew = reg.predict(xnew.reshape(-1,1))
+    fig,ax=plt.subplots()
+    ax.scatter(x,y)
+    ax.plot(xnew,ynew)
+    ax.set_xlabel('BPM')
+    ax.set_ylabel('hrd_Intero_threshold_adj_abs')
+    ax.set_title(f'Theil-Sen regression: y = {reg.coef_[0]:.2f}x + {reg.intercept_:.2f}')
+    t.loc[t.use_hrd,'hrd_Intero_threshold_adj_abs'] = t.loc[t.use_hrd,'hrd_Intero_threshold_adj_abs'] - reg.predict(t.loc[t.use_hrd,'hrd_Intero_bpm_mean'].values.reshape(-1,1)) 
+    """
 
     #### PAIRWISE PLOTS #####
     """
@@ -298,6 +324,7 @@ if __name__=='__main__':
 
     #Psychophysics vs HR measures? Only hrd_Intero_threshold_adj_abs vs hrd_Intero_bpm_mean is significant (for regress_extero)
     grid=acommonfuncs.pairplot(t,x_vars = ['hrd_Intero_threshold','hrd_Intero_threshold_abs','hrd_Intero_threshold_adj','hrd_Intero_threshold_adj_abs','hrd_Intero_slope'],y_vars = ['hrd_Intero_bpm_mean','hrd_Intero_RR_std'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
+    grid=acommonfuncs.pairplot(t,x_vars = ['hrd_Extero_threshold','hrd_Extero_threshold_abs','hrd_Extero_slope'],y_vars = ['hrd_Intero_bpm_mean','hrd_Intero_RR_std'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
 
     #Psychophysics vs clinical measures? Sig: In HC only, high IQ correlates with high Intero_threshold. In patients only, low IQ correlates with exteroceptive imprecision and high exteroceptive |threshold|, but not with interoceptive measures
     grid=acommonfuncs.pairplot(t,x_vars = ['hrd_Intero_threshold','hrd_Intero_threshold_abs','hrd_Intero_threshold_adj','hrd_Intero_threshold_adj_abs','hrd_Intero_slope'],y_vars = ['fsiq2','sofas','panss_N'],include_these=t.use_hrd & not_outliers, height=1.0, robust=robust)
@@ -331,6 +358,7 @@ if __name__=='__main__':
     #Significant results from pairplots
     amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_threshold','hrd_Extero_threshold',robust=robust)
     amyhrd_utils.scatter(t,'hc',PT,'hrd_Extero_threshold_abs','hrd_Extero_slope',robust=robust)
+    amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj',robust=robust)
     amyhrd_utils.scatter(t,'hc',PT,'hrd_Intero_bpm_mean','hrd_Intero_threshold_adj_abs',robust=robust)
     amyhrd_utils.scatter(t,'hc',PT,'fsiq2','hrd_Extero_threshold_abs',robust=robust)
     amyhrd_utils.scatter(t,'hc',PT,'fsiq2','hrd_Extero_slope',robust=robust)

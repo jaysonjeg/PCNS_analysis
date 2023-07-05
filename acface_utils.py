@@ -5,6 +5,20 @@ from sklearn.decomposition import PCA
 import warnings
 import acommonvars
 
+
+def calculate_averages(lst):
+    #Given a list of numbers, return a list of the averages of consecutive pair of numbers
+    return [np.mean([lst[i],lst[i+1]]) for i in range(len(lst)-1)]
+
+#SETTABLE PARAMETERS common to all scripts pertaining to cface task
+ntrials=80
+n_trialsperemotion=40
+emots=['ha','an']
+relevant_timejitters=[0,0.5,0.75,1.5,0.75,0.5] #(0, trigger, post_trigger, stimMove, fixation, next instruction)
+relevant_labels=['trigger','post_trigger','stimMove','fixation','next_instruct']
+relevant_timestamps = np.cumsum(relevant_timejitters)
+midpoint_timestamps = calculate_averages(relevant_timestamps)   
+
 def plot_this_au(df,ax,times,aust,this_AU='AU12',color='green',label=None):
     #Plot AU12 time series with annotations. Blue lines are happy trigger. Red lines are angry trigger
     ax.set_title(this_AU)
@@ -207,10 +221,6 @@ def pca_comp0_direction_correct(target_fps,values_resampled,pca):
     values_resampled_0_to_mid_stimMove = values_resampled[mid_stimMove_frame,:] - values_resampled[0,:] 
     comp0_0_to_mid_stimMove = values_resampled_0_to_mid_stimMove @ pca.components_[0]
     return comp0_0_to_mid_stimMove > 0 
-
-def calculate_averages(lst):
-    #Given a list of numbers, return a list of the averages of consecutive pair of numbers
-    return [np.mean([lst[i],lst[i+1]]) for i in range(len(lst)-1)]
 
 def get_all_post_trigger_time_series(df,interp_aus,times_trial_regular,emotion='ha'):
     start_times = df['trigger_onset'][df.ptemot==emotion.upper()].values
