@@ -67,7 +67,7 @@ def corr_2groups(t,group1,group2,column_name1,column_name2,robust=True,include_t
         title_string += f'{group}: r={r:.2f} p={p:.2f}, '
     print(title_string)   
 
-def pairplot(t,vars=None,x_vars=None,y_vars=None,height=1.5,include_these=None,kind='reg',robust=True):
+def pairplot(t,vars=None,x_vars=None,y_vars=None,height=1.5,include_these=None,kind='reg',robust=True,group='group03'):
     """
     Scatterplot of all pairwise variables in vars, and kernel density plots for each variable on the diagonal
     Correlation coefficients and p-values are printed as titles
@@ -82,9 +82,9 @@ def pairplot(t,vars=None,x_vars=None,y_vars=None,height=1.5,include_these=None,k
         corner=True
     else:
         corner=False
-    grid=sns.pairplot(t.loc[include_these & (t.group03!=''),:],hue='group03',corner=corner,kind=kind,x_vars=x_vars,y_vars=y_vars,height=height,palette=colors)
+    grid=sns.pairplot(t.loc[include_these & (t[group]!=''),:],hue=group,corner=corner,kind=kind,x_vars=x_vars,y_vars=y_vars,height=height,palette=colors)
     grid.fig.suptitle(f'Robust={robust}')
-    groups = [i for i in np.unique(t.group03) if i is not '']
+    groups = [i for i in np.unique(t[group]) if i != '']
     #Put correlation values on the off-diagonals
     for i in range(len(x_vars)):
         for j in range(len(y_vars)):
