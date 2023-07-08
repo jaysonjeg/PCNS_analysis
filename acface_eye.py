@@ -9,11 +9,6 @@ For each subject and condition, outlier trials will have a large standard deviat
 Outlier subjects:
 (1) abnormally large standard deviation of baseline pupil size across trials
 (2) abnormal standard deviation of pupil values in the median trace for any of the 4 conditions (optional)
-
-Optional: Look at percentage changes from baseline rather than absolute changes, so it is more comparable across subjects
-
-To consider:
-Anna: Normalise by dividing by baseline rather than subtracting?
 """
 
 import numpy as np, pandas as pd, matplotlib.pyplot as plt, pingouin as pg, seaborn as sns
@@ -28,7 +23,6 @@ eyedata_raw_folder = f'{analysis_folder}\\pupils_cface1'
 
 ### SETTABLE PARAMETERS 
 group = 'group02' #the grouping variable
-divide_pupil_by_baseline = False #for each trial, divide pupil values by baseline pupil size at the start of that trial
 to_plot_subject = False
 
 ### Get some variables common to all participants
@@ -69,8 +63,8 @@ else:
         if t['use_cface_eye'][i]:
             subject=t.subject[i]
             #next line gets the file {eyedata_raw_folder}\\{subject}_cface_Baseline.csv
-            baseline = pd.read_csv(f'{eyedata_raw_folder}\\{subject}_cface_Baseline.csv') #baseline pupil size for each trial. Note that there may not be a row for every single trial.
-            pupil_raw = pd.read_csv(f'{eyedata_raw_folder}\\{subject}_cface_BaselineCorrPupil.csv') #column headings are actual trial number. Each column contains a time series of pupil size for that trial. Note that there may not be a column for every single trial.
+            baseline = pd.read_csv(f'{eyedata_raw_folder}\\{subject}_cface_MedianBaseline.csv') #baseline pupil size for each trial. Note that there may not be a row for every single trial.
+            pupil_raw = pd.read_csv(f'{eyedata_raw_folder}\\{subject}_cface_BaselineRatioCorrPupil.csv') #column headings are actual trial number. Each column contains a time series of pupil size for that trial. Note that there may not be a column for every single trial.
 
             t.at[i,'cface_pupil_base_median'] = baseline.baseline_pupil.median()
             t.at[i,'cface_pupil_base_std'] = baseline.baseline_pupil.std()
@@ -89,15 +83,7 @@ else:
             for cond in conds:
                 #print(f'Subject {subject}, cond {cond}')
                 which_trials = [i for i in conds_trials_str[cond] if i in pupil_raw.columns] #only include trials that have a column in pupil_raw
-
                 pupil = pupil_raw.loc[:,which_trials]
-
-                if divide_pupil_by_baseline:
-                    which_trials_int = [int(i) for i in which_trials]
-                    baselines = baseline.loc[baseline.trial_number.isin(which_trials_int),'baseline_pupil'].values 
-                    pupil = pupil.div(baselines,axis=1)
-
-
                 pupil = remove_outlier_trials(pupil)
                 pupil_allconds[cond] = pupil
 
@@ -142,7 +128,7 @@ include_subjects_std = ~t.subject.isin(outliers_std)
 
 #Exclude subjects in a manually specified list
 
-exclude_subjects_general = [25,29,35,42,46,47,52,66,67,69,70,95,105,124] #mostly due to frequent blinks, or blinks at end of trial
+exclude_subjects_general = [25,29,35,42,46,47,52,66,67,69,70,95,105,124] #mostly due to frequent blinks
 blinks_at_end = [35,73,100,108,113,122,130] #subjects who have a strong blink at end of each trial
 exclude_subjects_AN = [25,33,51,55,57,60,71,72,76,79,84,85,86,87,117,121,130,133] #subjects whose frown trials must be excluded because their eyes semi-shut, changing pupil size
 exclude_subjects_AN_borderline = [24,28]
@@ -168,9 +154,9 @@ fig.tight_layout()
 
 t.use_cface_eye = t.use_cface_eye & include_subjects & include_subjects_base_std #& include_subjects_std
 
-fig,axs=plt.subplots(2)
-for ax,column_name in zip(axs,['cface_pupil_HAHA','cface_pupil_HAAN']):
-    print(f'{c.time()[1]}: Starting lineplot with bootstrapped CIs for group median trace for {column_name}')
+
+
+def get_pupil_df_long(column_name):
     df = t.loc[t.use_cface_eye & (t[group]!=''),column_name]
     array = np.vstack(df).T
     subject_names = t.subject[t.use_cface_eye & (t[group]!='')].values
@@ -180,8 +166,28 @@ for ax,column_name in zip(axs,['cface_pupil_HAHA','cface_pupil_HAAN']):
     df3[group]=''
     for gp in t[group].unique():
         df3.loc[df3.subject.isin(t.subject[t[group]==gp]).values,group] = gp
-    sns.lineplot(df3,x='time',y='pupil size',hue=group,palette=colors,ax=ax,n_boot=500,estimator=np.median)
-    ax.set_title(column_name)
+    df3['condition'] = column_name[-4:]
+    return df3
+
+dfs = pd.concat([get_pupil_df_long(column_name) for column_name in ['cface_pupil_HAHA','cface_pupil_HAAN']])
+
+n_boot=100
+print(f'{c.time()[1]}: Starting lineplot with bootstrapped CIs for group median traces with {n_boot} bootstraps')
+fig,axs=plt.subplots(2,2)
+sns.lineplot(ax=axs[0,0],data=dfs.loc[dfs[group]=='hc',:],x='time',y='pupil size',hue='condition',n_boot=n_boot,estimator=np.median)
+axs[0,0].set_title('healthy controls')
+sns.lineplot(ax=axs[0,1],data=dfs.loc[dfs[group]=='cc',:],x='time',y='pupil size',hue='condition',n_boot=n_boot,estimator=np.median)
+axs[0,1].set_title('clinical cohort')
+sns.lineplot(ax=axs[1,0],data=dfs.loc[dfs.condition=='HAHA',:],x='time',y='pupil size',hue=group,n_boot=n_boot,estimator=np.median,palette=colors)
+axs[1,0].set_title('HAHA')
+sns.lineplot(ax=axs[1,1],data=dfs.loc[dfs.condition=='HAAN',:],x='time',y='pupil size',hue=group,n_boot=n_boot,estimator=np.median,palette=colors)
+axs[1,1].set_title('HAAN')
+for ax in axs.flatten():
+    for j in relevant_timestamps:
+        ax.axvline(x=j) 
+fig.tight_layout()
+
+
 
 def plot_pupil_subjects(ax,times_trial_regular,variable,group):
     for gp in t[group].unique():

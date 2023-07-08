@@ -1,45 +1,67 @@
 """
 Analyse facegng data
-Adapted from aff1.py
+New columns are:
+    use_facegng
+    facegng_outliers
+    gng_RT_fear: median reaction time in seconds for Fear Go trials
+    gng_RT_calm
+
 """
-import numpy as np, pandas as pd
+import numpy as np, pandas as pd, seaborn as sns, pingouin as pg
 import matplotlib.pyplot as plt
 from glob import glob
 import re
 
-def facegng_get_subject_data(subject,show_plots):
-    contents=glob(f"{top_folder}\\PCNS_{subject}_BL\\beh\\facegng*\\") #find the FF1 folder for this subject
-    assert(len(contents)==1) 
-    resultsFolder=contents[0]
-    df=pd.read_csv(glob(f"{resultsFolder}*out.csv")[0]) # make log csv into dataframe
-    emots=df['emot'] 
-    RT=df['RT']
-    
-    RT_fear=RT[emots=='fear']
-    RT_calm=RT[emots=='calm']
-    RT_FearMinusCalm = RT_fear.mean() - RT_calm.mean() #Difference in reaction time between fear and calm conditions, mean for the subject
+import acommonfuncs
+from acommonvars import *
 
-    if show_plots: #Plot for particular subject
-        pass
-    
-    return RT_FearMinusCalm
-
-top_folder="D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw\\"
-files_with_task=glob(f"{top_folder}\\PCNS_*_BL\\beh\\facegng*\\")
-subjects=[re.search('PCNS_(.*)_BL',file).groups()[0] for file in files_with_task] #gets all subject names who have data for the given task
-subjects_to_exclude=['020'] #exclude these subjects
-"""
-020: no ppg
-
-"""
+if __name__=='__main__':
+    c = acommonfuncs.clock()
+    t['use_facegng'] = ((include) & (t.valid_facegngi==1)) 
 
 
-subjects_with_task = [subject for subject in subjects if subject not in subjects_to_exclude]
+    ### SETTABLE PARAMETERS 
+    group = 'group02' #the grouping variable
+    load_table=True
 
-temp=[facegng_get_subject_data(subject,show_plots=False) for subject in subjects_with_task]
-RTs_FearMinusCalm = np.array(temp).T.tolist() #convert into separate lists
+    ### Get reaction time data
+    new_columns = ['use_facegng', 'gng_RT_fear', 'gng_RT_calm']
+    conds = ['fear target', 'calm target']
+    if load_table:
+        t=acommonfuncs.add_table(t,'outcomes_facegng.csv')
+    else:
+        for i in range(len(t)):
+            if t['use_facegng'][i]:
+                subject=t.subject[i]
+                print(f'{c.time()[1]}: Subject {subject}')
+                contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\facegng*\\")
+                assert(len(contents)==1) 
+                resultsFolder=contents[0]
+                df=pd.read_csv(glob(f"{resultsFolder}*out.csv")[0]) # make log csv into dataframe
+                for cond in conds:
+                    inds = df.realcond == cond
+                    t.at[i,f'gng_RT_{cond[:4]}'] = np.nanmedian(df.RT[inds])
+        t.loc[:,new_columns].to_csv(f'{temp_folder}\\outcomes_facegng.csv')
 
-from scipy import stats
-x=stats.ttest_1samp(RTs_FearMinusCalm,popmean=0).pvalue/2
+    t['gng_RT_FearMinusCalm'] = t['gng_RT_fear'] - t['gng_RT_calm']
 
-print(x)
+    outliers_RT_fear_bool = pg.madmedianrule(t.loc[t.use_facegng & (t[group]!=''),'gng_RT_fear'])
+    outliers_RT_fear = t.loc[t.use_facegng & (t[group]!=''),'subject'][outliers_RT_fear_bool].values
+    outliers_RT_calm_bool = pg.madmedianrule(t.loc[t.use_facegng & (t[group]!=''),'gng_RT_calm'])
+    outliers_RT_calm = t.loc[t.use_facegng & (t[group]!=''),'subject'][outliers_RT_calm_bool].values
+
+    outliers = set(outliers_RT_fear).union(set(outliers_RT_calm))
+    print(f'outliers_RT_fear: {outliers_RT_fear}')
+    print(f'outliers_RT_calm: {outliers_RT_calm}')
+    print(f'\nOutliers: {outliers}')
+
+    t['facegng_outliers'] = t.subject.isin(outliers)
+
+    fig,axs=plt.subplots(2,2)
+    hue = group
+    t2 = t.loc[t.use_facegng & (t[group]!='') & ~t.facegng_outliers,:]
+    sns.stripplot(ax=axs[0,0],data = t2,x=group, hue=hue,y='gng_RT_fear')
+    sns.stripplot(ax=axs[0,1],data = t2, x=group, hue=hue,y='gng_RT_calm')
+    sns.stripplot(ax=axs[1,0],data = t2, x=group, hue=hue,y='gng_RT_FearMinusCalm')
+    fig.tight_layout()
+    plt.show(block=False)

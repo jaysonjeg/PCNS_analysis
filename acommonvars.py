@@ -40,7 +40,8 @@ print(f'Running on {pc}. Data files in {files_source}')
 
 if pc=='laptop' and files_source=='NEWYSNG':
     #data_folder="Z:\\Shiami_DICOM\\Psychosis\\PCNS"
-    top_folder = "Z:\\NEWYSNG\\PCNS\\Data"
+    #top_folder = "Z:\\NEWYSNG\\PCNS\\Data"
+    top_folder = "Z:\\PCNS\\Data"
     redcap_file = "Z:\\PCNS\\Data\\CogEmotPsych_DATA_2023-06-16_0813.csv"
 elif pc=='home':
     if files_source == 'NEWYSNG':
@@ -53,6 +54,9 @@ elif pc=='home':
 data_folder = f"{top_folder}\\Data_raw\\per_subject"
 analysis_folder = f"{top_folder}\\Data_analysis"
 temp_folder = f"{analysis_folder}\\temp"
+
+
+
 
 '''
 data_folder="G:\\My Drive\\Share_Angelica\\Data_raw\\per_subject"
