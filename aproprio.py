@@ -54,7 +54,7 @@ if __name__=='__main__':
     new_columns = ['use_prop','prop_outliers','prop_stim', 'prop_resp','prop_stim_min','prop_stim_max','prop_stim_range','prop_slope','prop_intercept','prop_r2']
 
     if load_table:
-        t=acommonfuncs.add_table(t,'outcomes_prop.csv')
+        t = acommonfuncs.add_table(t,'outcomes_prop.csv')
         t = acommonfuncs.str_columns_to_literals(t,['prop_stim', 'prop_resp'])
     else:
         t['use_prop'] = ((include) & (t.valid_proprioo==1)) 
@@ -131,9 +131,9 @@ fig.tight_layout()
 pg.ttest(t2.prop_slope[hc],t2.prop_slope[cc])['p-val']
 
 #Scatter plots
-"""
-grid=acommonfuncs.pairplot(t2,vars=['prop_stim_max','prop_slope','prop_intercept','prop_r2'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
 
+grid=acommonfuncs.pairplot(t2,vars=['prop_stim_max','prop_slope','prop_intercept','prop_r2'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+"""
 grid=acommonfuncs.pairplot(t2,x_vars=['prop_stim_max','prop_slope','prop_intercept','prop_r2'],y_vars=['fsiq2'],height=1.5,kind='reg',robust=True,group=group)
 
 grid=acommonfuncs.pairplot(t2.loc[cc,:],x_vars=['prop_stim_max','prop_slope','prop_intercept','prop_r2'],y_vars=['panss_P','panss_N','sofas','meds_chlor'],height=1.5,kind='reg',robust=True,group=group)

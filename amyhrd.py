@@ -231,7 +231,6 @@ if __name__=='__main__':
     divided_by_HR('hrd_Extero_slope')
     """
 
-
     if outlier_method=='zscore':
         Extero_zscores = zscore(t.hrd_Extero_threshold,nan_policy='omit')
         Intero_zscores = zscore(t.hrd_Intero_threshold,nan_policy='omit')
@@ -412,6 +411,27 @@ if __name__=='__main__':
         amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_slope',to_plot_compare=to_plot)
         amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_meta_d',include_these=has_metad,to_plot_compare=to_plot)
         amyhrd_utils.compare(t,'hc',PT,f'hrd_{cond}_m_ratio',include_these=has_metad,to_plot_compare=to_plot)
+
+
+
+    #Replace interoceptive threshold with 'cardiac beliefs' (subject's own HR + interoceptive threshold)
+    t['hrd_Intero_threshold_plus_HR'] = t.hrd_Intero_bpm_mean + t.hrd_Intero_threshold_adj
+    x = t.loc[t.use_hrd & hc, 'hrd_Intero_threshold_plus_HR']
+    y = t.loc[t.use_hrd & eval(PT), 'hrd_Intero_threshold_plus_HR']     
+    mean_diff = np.mean(x)-np.mean(y)
+    from scipy.stats import mannwhitneyu, ttest_ind
+    p_ttest = ttest_ind(x,y).pvalue
+    p_MW = mannwhitneyu(x,y).pvalue
+    fig, ax = plt.subplots()
+    sns.set_context('talk')
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=FutureWarning)
+        sns.stripplot(ax=ax,y='group03',x='hrd_Intero_threshold_plus_HR',data=t.loc[t.use_hrd & (eval('hc')|eval(PT)),:],alpha=0.5,palette=colors)
+    ax.set_title(f'meandiff={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
+    fig.tight_layout()
+    sns.despine()
+
 
 
     #Plot intero/extero thresholds/slopes for both groups together
