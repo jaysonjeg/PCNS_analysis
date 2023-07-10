@@ -65,7 +65,7 @@ for trial=1:ntrials
     %plot([posphaseu;auphaseu]')
     
     diffs=auphase-posphase;
-    inds=(diff(sign(y))==2); %find indices of sign crossings from neg to positive
+    inds=(diff(sign(posphase))==2); %find indices of sign crossings from neg to positive
     meandiff=mean(diffs(inds)); %mean difference value during sign crossings
     
     title(sprintf("PLV %.2f, meandiff %.2f",plv,meandiff)); %plot PLV and mean difference during sign crossings

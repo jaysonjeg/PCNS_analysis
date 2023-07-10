@@ -6,17 +6,16 @@ D:/FORSTORAGE/OpenFace-master/OpenFace-master/x64/Release/FeatureExtraction.exe 
 
 ### RUN OPENFACE TO GET .CSV FILES ###
 
+
 import subprocess
  
 #'movieDI_test_Te_F_Ricky_Humpty_2022_Mar_03_1643'
 
 vids_folder='D:\\FORSTORAGE\\Data\\Project_PCNS\\Data_raw\\PCNS_067_BL\\beh\\cface1_067_Ta_HFbR_MidHA_2022_Oct_13_0915'#source videos
-
 vids_folder = "D:\\FORSTORAGE\\EmotionDatabases\\Karolinska Directed Faces\\I. KDEF-dyn I\\I. KDEF-dyn I\\S4 Stimuli (Video-clips)\\1_Neutral-Happiness"
 
 
 vidnames=['cface1_067_Ta_HFbR_MidHA_2022_Oct_13_0915_cam_20fps.avi']
-
 vidnames=['F01-NE-HA.mp4']
 
 out_folder=f'{vids_folder}\OpenFace_static' #where to save
@@ -28,7 +27,6 @@ openfacefolder='D:/FORSTORAGE/OpenFace-master'
 
 openfacefile=f'{openfacefolder}/OpenFace-master/x64/Release/FeatureExtraction.exe'
 commands=[f'{openfacefile} -f {vids_folder}\{vidname} -au_static -out_dir {out_folder} -aus' for vidname in vidnames]
-
 
 for command in commands:
     subprocess.call(command)

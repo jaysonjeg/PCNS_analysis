@@ -44,6 +44,8 @@ def str_columns_to_literals(t,columns):
                 t.at[i,column] = eval(element)
     return t
 
+def normalize(data):
+    return (data - np.min(data)) / (np.max(data) - np.min(data))
 
     
 def corr(t,group,column_name1, column_name2, robust=True,include_these=None):

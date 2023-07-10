@@ -1,5 +1,5 @@
 """
-Analyse proprio data
+Analyse facial proprioception task (proprio)
 New columns
     use_prop
     prop_outliers
@@ -47,8 +47,8 @@ if __name__=='__main__':
     c = acommonfuncs.clock()
 
     ### SETTABLE PARAMETERS 
-    group = 'group03' #the grouping variable
-    load_table=True
+    group = 'group02' #the grouping variable
+    load_table=False
 
     ### Get data
     new_columns = ['use_prop','prop_outliers','prop_stim', 'prop_resp','prop_stim_min','prop_stim_max','prop_stim_range','prop_slope','prop_intercept','prop_r2']
