@@ -60,23 +60,23 @@ if __name__=='__main__':
         t['use_prop'] = ((include) & (t.valid_proprioo==1)) 
         t['prop_outliers'] = t.subject.isin(outliers)
         t=acommonfuncs.add_columns(t,['prop_stim','prop_resp'])
-        for i in range(len(t)):
-            if t['use_prop'][i]:
-                subject=t.subject[i]
+        for t_index in range(len(t)):
+            if t['use_prop'][t_index]:
+                subject=t.subject[t_index]
                 print(f'{c.time()[1]}: Subject {subject}')
                 stimface,respface=get_proprio_data(subject,AU_to_plot) 
-                t.at[i,'prop_stim'] = list(stimface)
-                t.at[i,'prop_resp'] = list(respface)
+                t.at[t_index,'prop_stim'] = list(stimface)
+                t.at[t_index,'prop_resp'] = list(respface)
 
-                t.at[i,'prop_stim_min'] = min(stimface)
-                t.at[i,'prop_stim_max'] = max(stimface)
-                t.at[i,'prop_stim_range'] = t.prop_stim_max[i] - t.prop_stim_min[i]
+                t.at[t_index,'prop_stim_min'] = min(stimface)
+                t.at[t_index,'prop_stim_max'] = max(stimface)
+                t.at[t_index,'prop_stim_range'] = t.prop_stim_max[t_index] - t.prop_stim_min[t_index]
 
-                if t.subject[i] not in outliers:
+                if t.subject[t_index] not in outliers:
                     slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(stimface,respface)
-                    t.at[i,'prop_slope'] = slope
-                    t.at[i,'prop_intercept'] = intercept
-                    t.at[i,'prop_r2'] = r_value**2
+                    t.at[t_index,'prop_slope'] = slope
+                    t.at[t_index,'prop_intercept'] = intercept
+                    t.at[t_index,'prop_r2'] = r_value**2
 
 
         t.loc[:,new_columns].to_csv(f'{temp_folder}\\outcomes_prop.csv')
@@ -97,20 +97,20 @@ def plot_subject(ax,i):
 fig,axs=plt.subplots(2,4)
 axs = axs.ravel()
 j=0
-for i in range(len(t)):
-    if t['use_prop'][i] and (t.subject[i] not in outliers) and (((t.prop_r2 < 0.5)[i]) | ((t.prop_slope < 0.65)[i])):
-        plot_subject(axs[j],i)
+for t_index in range(len(t)):
+    if t['use_prop'][t_index] and (t.subject[t_index] not in outliers) and (((t.prop_r2 < 0.5)[t_index]) | ((t.prop_slope < 0.65)[t_index])):
+        plot_subject(axs[j],t_index)
         j+=1
         if j==len(axs): break
 fig.tight_layout()
 
 #Plot stimulus-response regression line for all subjects together
 fig,ax=plt.subplots()
-for i in range(len(t)):
-    if t['use_prop'][i] and not(t['prop_outliers'][i]) and t[group][i]!='':
-        x = t.prop_stim[i]
-        y_pred = np.poly1d([t.prop_slope[i],t.prop_intercept[i]])(x)
-        gp=t[group][i]
+for t_index in range(len(t)):
+    if t['use_prop'][t_index] and not(t['prop_outliers'][t_index]) and t[group][t_index]!='':
+        x = t.prop_stim[t_index]
+        y_pred = np.poly1d([t.prop_slope[t_index],t.prop_intercept[t_index]])(x)
+        gp=t[group][t_index]
         ax.plot(x,y_pred,color=colors[gp],alpha=0.3,linewidth=0.5)
 ax.set_xlim([0,4])
 ax.set_ylim([0,4])

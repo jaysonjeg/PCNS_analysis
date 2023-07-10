@@ -30,9 +30,9 @@ if __name__=='__main__':
     if load_table:
         t=acommonfuncs.add_table(t,'outcomes_facegng.csv')
     else:
-        for i in range(len(t)):
-            if t['use_facegng'][i]:
-                subject=t.subject[i]
+        for t_index in range(len(t)):
+            if t['use_facegng'][t_index]:
+                subject=t.subject[t_index]
                 print(f'{c.time()[1]}: Subject {subject}')
                 contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\facegng*\\")
                 assert(len(contents)==1) 
@@ -40,7 +40,7 @@ if __name__=='__main__':
                 df=pd.read_csv(glob(f"{resultsFolder}*out.csv")[0]) # make log csv into dataframe
                 for cond in conds:
                     inds = df.realcond == cond
-                    t.at[i,f'gng_RT_{cond[:4]}'] = np.nanmedian(df.RT[inds])
+                    t.at[t_index,f'gng_RT_{cond[:4]}'] = np.nanmedian(df.RT[inds])
         t.loc[:,new_columns].to_csv(f'{temp_folder}\\outcomes_facegng.csv')
 
     t['gng_RT_FearMinusCalm'] = t['gng_RT_fear'] - t['gng_RT_calm']

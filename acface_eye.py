@@ -37,9 +37,9 @@ conds_trials_str = {cond:[str(i) for i in conds_trials[cond]] for cond in conds}
 
 #Optional check that all subjects have the same sequence of conditions
 """
-for i in range(len(t)):
-    if t['use_cface'][i] and t['valid_eyetracking'][i]==1:
-        subject=t.subject[i]
+for t_index in range(len(t)):
+    if t['use_cface'][t_index] and t['valid_eyetracking'][t_index]==1:
+        subject=t.subject[t_index]
         df = acommonfuncs.get_beh_data('cface1',subject,'out',use_MRI_task=True)
         HAHA_trialnumbers = np.where(df.type=='HAHA')[0] + 1
         print(HAHA_trialnumbers[-1])
@@ -59,15 +59,15 @@ if load_table:
     t = acommonfuncs.str_columns_to_literals(t,pupil_variables)
 else:
     t=acommonfuncs.add_columns(t,pupil_variables)
-    for i in range(len(t)):
-        if t['use_cface_eye'][i]:
-            subject=t.subject[i]
+    for t_index in range(len(t)):
+        if t['use_cface_eye'][t_index]:
+            subject=t.subject[t_index]
             #next line gets the file {eyedata_raw_folder}\\{subject}_cface_Baseline.csv
             baseline = pd.read_csv(f'{eyedata_raw_folder}\\{subject}_cface_MedianBaseline.csv') #baseline pupil size for each trial. Note that there may not be a row for every single trial.
             pupil_raw = pd.read_csv(f'{eyedata_raw_folder}\\{subject}_cface_BaselineRatioCorrPupil.csv') #column headings are actual trial number. Each column contains a time series of pupil size for that trial. Note that there may not be a column for every single trial.
 
-            t.at[i,'cface_pupil_base_median'] = baseline.baseline_pupil.median()
-            t.at[i,'cface_pupil_base_std'] = baseline.baseline_pupil.std()
+            t.at[t_index,'cface_pupil_base_median'] = baseline.baseline_pupil.median()
+            t.at[t_index,'cface_pupil_base_std'] = baseline.baseline_pupil.std()
 
             #Check whether for this subject, the baseline pupil size correlates with standard deviation of pupil size in the subsequent trial. 
             """
@@ -88,10 +88,10 @@ else:
                 pupil_allconds[cond] = pupil
 
                 pupil_std_mean = pupil.std(axis=1).mean() #mean standard deviation across trials
-                t.at[i,f'cface_pupil_{cond}_std'] = pupil_std_mean
+                t.at[t_index,f'cface_pupil_{cond}_std'] = pupil_std_mean
 
                 pupil_median = pupil.median(axis=1).values.astype(np.float32) #median across trials
-                t.at[i,f'cface_pupil_{cond}'] = list(pupil_median)
+                t.at[t_index,f'cface_pupil_{cond}'] = list(pupil_median)
             
             if to_plot_subject or (int(subject) in []):
                 plt.figure(figsize = [12, 8]) #Plot time series for each trial separately, colour coded by condition

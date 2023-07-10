@@ -199,40 +199,40 @@ if load_table:
 else:
     t=acommonfuncs.add_columns(t,['cface_mean_ts_ha_pca0','cface_mean_ts_an_pca0','cface_mean_ts_ha_au12'])
     t=acommonfuncs.add_columns(t,['cface_latencies_ha','cface_durations_ha','cface_latencies_an','cface_durations_an'])
-    for i in range(t.shape[0]):
-        if t.use_cface[i]:
-            outcomes = get_outcomes(subs[i])
-            #t.at[i,'cface_amp_max_mean'] = np.mean(outcomes['amp_max'])
-            #t.at[i,'cface_amp_range_mean'] = npt.co.mean(outcomes['amp_range'])
-            #t.at[i,'cface_amp_max_slope'] = acface_utils.get_slope(outcomes['amp_max'])
+    for t_index in range(t.shape[0]):
+        if t.use_cface[t_index]:
+            outcomes = get_outcomes(subs[t_index])
+            #t.at[t_index,'cface_amp_max_mean'] = np.mean(outcomes['amp_max'])
+            #t.at[t_index,'cface_amp_range_mean'] = npt.co.mean(outcomes['amp_range'])
+            #t.at[t_index,'cface_amp_max_slope'] = acface_utils.get_slope(outcomes['amp_max'])
             if type(outcomes['mean_ts_pca'])==dict: #exclude nans from poor webcam acquisitions
-                t.at[i,'cface_goodwebcam']=True #whether webcam acquisition was good enough to use
+                t.at[t_index,'cface_goodwebcam']=True #whether webcam acquisition was good enough to use
 
-                t.at[i,'cface_amp_max_mean'] = np.mean(outcomes['amp_max'])
-                t.at[i,'cface_amp_range_mean'] = np.mean(outcomes['amp_range'])
-                t.at[i,'cface_amp_max_slope'] = acface_utils.get_slope(outcomes['amp_max'])
+                t.at[t_index,'cface_amp_max_mean'] = np.mean(outcomes['amp_max'])
+                t.at[t_index,'cface_amp_range_mean'] = np.mean(outcomes['amp_range'])
+                t.at[t_index,'cface_amp_max_slope'] = acface_utils.get_slope(outcomes['amp_max'])
 
-                t.at[i,'cface_mean_ts_ha_pca0'] = list(outcomes['mean_ts_pca']['ha'][:,0])
-                t.at[i,'cface_mean_ts_an_pca0'] = list(outcomes['mean_ts_pca']['an'][:,0])
-                t.at[i,'cface_mean_ts_ha_au12'] = list(outcomes['mean_ts']['ha'][:,ha_AU_index])
+                t.at[t_index,'cface_mean_ts_ha_pca0'] = list(outcomes['mean_ts_pca']['ha'][:,0])
+                t.at[t_index,'cface_mean_ts_an_pca0'] = list(outcomes['mean_ts_pca']['an'][:,0])
+                t.at[t_index,'cface_mean_ts_ha_au12'] = list(outcomes['mean_ts']['ha'][:,ha_AU_index])
                 
                 r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(outcomes['other_metrics']['ha'],n_trialsperemotion)
-                t.at[i,'cface_latencies_validperc_ha'] = r_validperc
-                t.at[i,'cface_latencies_ha'] = r_latencies
-                t.at[i,'cface_latencies_mean_ha'] = np.mean(r_latencies)
-                t.at[i,'cface_durations_ha'] = r_durations
-                t.at[i,'cface_durations_mean_ha'] = np.mean(r_durations)
-                t.at[i,'cface_maxgrads_mean_ha'] = np.mean(r_maxgrads)
+                t.at[t_index,'cface_latencies_validperc_ha'] = r_validperc
+                t.at[t_index,'cface_latencies_ha'] = r_latencies
+                t.at[t_index,'cface_latencies_mean_ha'] = np.mean(r_latencies)
+                t.at[t_index,'cface_durations_ha'] = r_durations
+                t.at[t_index,'cface_durations_mean_ha'] = np.mean(r_durations)
+                t.at[t_index,'cface_maxgrads_mean_ha'] = np.mean(r_maxgrads)
                 r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(outcomes['other_metrics']['an'],n_trialsperemotion)
-                t.at[i,'cface_latencies_validperc_an'] = r_validperc
-                t.at[i,'cface_latencies_an'] = r_latencies
-                t.at[i,'cface_latencies_mean_an'] = np.mean(r_latencies)
-                t.at[i,'cface_durations_an'] = r_durations
-                t.at[i,'cface_durations_mean_an'] = np.mean(r_durations)
-                t.at[i,'cface_maxgrads_mean_an'] = np.mean(r_maxgrads)
+                t.at[t_index,'cface_latencies_validperc_an'] = r_validperc
+                t.at[t_index,'cface_latencies_an'] = r_latencies
+                t.at[t_index,'cface_latencies_mean_an'] = np.mean(r_latencies)
+                t.at[t_index,'cface_durations_an'] = r_durations
+                t.at[t_index,'cface_durations_mean_an'] = np.mean(r_durations)
+                t.at[t_index,'cface_maxgrads_mean_an'] = np.mean(r_maxgrads)
                 #acface_utils.plot_this_au_trial(outcomes['other_metrics']['an'],'an - comp0',times_trial_regular,relevant_timestamps,relevant_labels,midpoint_timestamps,plot_relevant_timestamps=False,results=outcomes['other_metrics']['an'])          
             else:
-                t.at[i,'cface_goodwebcam']=False
+                t.at[t_index,'cface_goodwebcam']=False
         t.to_csv(f'{temp_folder}\\outcomes_cface_face.csv')
 
 
@@ -302,10 +302,10 @@ fig.tight_layout()
 
 #Look at mean time series
 def plot_mean_ts(ax,data,title,which_subjects,ylims=[-2.5,2.5]):
-    for i in range(len(t)):
-        if t.use_cface[i] and (hc|sz|sza)[i] and t.cface_goodwebcam[i]: 
-            if which_subjects[i]:
-                ax.plot(times_trial_regular,data[i],color='black',linewidth=0.4)
+    for t_index in range(len(t)):
+        if t.use_cface[t_index] and (hc|sz|sza)[t_index] and t.cface_goodwebcam[t_index]: 
+            if which_subjects[t_index]:
+                ax.plot(times_trial_regular,data[t_index],color='black',linewidth=0.4)
     for j in relevant_timestamps:
         ax.axvline(x=j) 
     for i,annotation in enumerate(relevant_labels):

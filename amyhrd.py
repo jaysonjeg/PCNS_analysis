@@ -95,18 +95,18 @@ if __name__=='__main__':
     if load_t:
         t = pd.read_csv(f'{temp_folder}\\outcomes_myhrd.csv')
     else:
-        for i in range(t.shape[0]): #t.shape[0]
-            if t.use_hrd[i]:
-                print(subs[i])
-                outcomes = amyhrd_utils.get_outcomes(subs[i],to_print_subject,to_plot_subject)                
+        for t_index in range(t.shape[0]): #t.shape[0]
+            if t.use_hrd[t_index]:
+                print(subs[t_index])
+                outcomes = amyhrd_utils.get_outcomes(subs[t_index],to_print_subject,to_plot_subject)                
                 #save dictionary 'outcomes' to file
                 import pickle
-                with open(f'{temp_folder}\\outcomes_myhrd\\{subs[i]}_outcomes.pkl', 'wb') as f:
+                with open(f'{temp_folder}\\outcomes_myhrd\\{subs[t_index]}_outcomes.pkl', 'wb') as f:
                     pickle.dump(outcomes, f)
 
                 for cond in ['Intero','Extero']:
                     for j in outcomes[cond].keys():
-                        t.loc[i,f'hrd_{cond}_{j}']=outcomes[cond][j]
+                        t.loc[t_index,f'hrd_{cond}_{j}']=outcomes[cond][j]
         t.to_csv(f'{temp_folder}\\outcomes_myhrd.csv')
     print(f'Done loading data at {clock.time()[1]}')
 
@@ -114,13 +114,13 @@ if __name__=='__main__':
     #Make a new group column with two groups (hc and PT) in both t and df
     t['group03'] = '' 
     df['group03'] = '' 
-    for i,row in t.iterrows():
+    for t_index,row in t.iterrows():
         record_id = row.record_id
-        if hc[i]: 
-            t.at[i,'group03'] = 'hc'
+        if hc[t_index]: 
+            t.at[t_index,'group03'] = 'hc'
             df.loc[df.Subject==record_id,'group03'] = 'hc'
-        elif eval(PT)[i]: 
-            t.at[i,'group03'] = PT
+        elif eval(PT)[t_index]: 
+            t.at[t_index,'group03'] = PT
             df.loc[df.Subject==record_id,'group03'] = PT
     #df = df[(df.group03=='hc') | (df.group03==PT)] #only include subjects in the two groups of interest
 

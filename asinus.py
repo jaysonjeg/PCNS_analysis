@@ -85,9 +85,9 @@ if __name__=='__main__':
         t['use_sinus'] = ((include) & (t.valid_sinuso==1)) 
         t['prop_outliers'] = t.subject.isin(outliers)
         t=acommonfuncs.add_columns(t,['sinus_ts'])
-        for i in range(len(t)):
-            if t['use_sinus'][i]:
-                subject=t.subject[i]
+        for t_index in range(len(t)):
+            if t['use_sinus'][t_index]:
+                subject=t.subject[t_index]
                 print(f'{c.time()[1]}: Subject {subject}')
 
 
@@ -121,6 +121,23 @@ if __name__=='__main__':
                 aus3 = preprocessing.minmax_scale(aus2.reshape(-1,aus2.shape[-1]), feature_range=(0, 1), axis=1, copy=True).reshape(aus2.shape)
                 ausn = np.transpose(aus3, axes=[0,2,1])
 
+
+                #looping over i will be messed up by little loops within i... do my other codes have this problem?
+                #or try wtc. (wavelet coherence). Get phase lag, and coherence value
+
+
+                def lowpass_filter(data,lowcut,fs,axis=-1):
+                    #try lowcut = 1, 3, 4
+                    from scipy.signal import butter, lfilter
+                    order = 10
+                    b, a = butter(order, lowcut, btype='low', fs=fs, output='ba')
+                    y = lfilter(b, a, data,axis=axis)
+                    return y                
+                
+                #lowcut = 1 #low pass cutoff in Hz
+                #ausn = lowpass_filter(ausn,lowcut,int(1/time_interval),axis=1)
+
+                
                 #Plot subject's data
                 fig,axs=plt.subplots(5,2,figsize=(12,8))
                 for trial in range(ntrials):
@@ -134,10 +151,7 @@ if __name__=='__main__':
                     ax.set_title(f'Trial {trial+1}')
                     ax.set_xlabel('Time (s)')
                     ax.set_ylabel(AU_to_plot)
-
-
-                #bandpass filter first
-                #or try wtc. (wavelet coherence). Get phase lag, and coherence value
+                
 
                 def PLV(x,y):
                     #calculate phase locking value of vectors x and y
@@ -163,38 +177,45 @@ if __name__=='__main__':
                     diffs[diffs > np.pi] -= 2*np.pi #a -= 360 if a > 180
                     diffs[diffs < -np.pi] += 2*np.pi #a += 360 if a < -180
 
+                    #find peaks in diffs using scipy findpeaks. THen look at the gradient of diffs. This is basically how the rate of change of phase is different between response and stimulus. The median of these differences indicates the rapidity of the person's facial response. Might need to smooth data for this to work well.
+                    from scipy.signal import find_peaks
+                    diffs_grad = np.gradient(diffs)
+                    peaks, _ = find_peaks(diffs_grad, height=0)
+                    median_diffgrad = np.median(diffs_grad[peaks]) #median (among local parks) of gradient of diffs      
+                
+
                     mean_diff_at_peaks = np.mean(diffs[indices]) #mean difference (radians) between stimulus and response phase at stimulus peaks
                     mean_diff = np.mean(diffs)
 
-                    print(f'subject {subject}, mean_diff_at_peaks {mean_diff_at_peaks:.2f}, mean_diff {mean_diff:.2f}')
+                    #print(f'subject {subject}, mean_diff_at_peaks {mean_diff_at_peaks:.2f}, mean_diff {mean_diff:.2f}')
 
                     ax.plot(times_trial_regular,posphase,color='k',label='stimulus',alpha=0.3)
-                    ax.plot(times_trial_regular,auphase,color='b',label='response')
+                    ax.plot(times_trial_regular,auphase,color='b',label='response',alpha=0.5)
                     ax.plot(times_trial_regular,diffs,color='r',label='diff',alpha=0.3)   
                     for index in indices:
                         ax.axvline(x=times_trial_regular[index],color='green',alpha=0.3)
                     ax.axhline(y=0,color='black',alpha=0.3)
                     ax.set_xlabel('Time')
                     ax.set_ylabel('Phase')
-                    ax.set_title(f"{trial+1}. PLV {plv:.2f}, diff {mean_diff:.2f}, diff@peaks {mean_diff_at_peaks:.2f}")
+                    ax.set_title(f"{trial+1}. PLV {plv:.2f}, diff {mean_diff:.2f}, grad {median_diffgrad:.2f}")
                 #fig.tight_layout()
-
                 plt.show()
+                #assert(0)      
 
                 """
                 sinus_ts=get_sinus_data(subject) 
-                t.at[i,'prop_stim'] = list(stimface)
-                t.at[i,'prop_resp'] = list(respface)
+                t.at[t_index,'prop_stim'] = list(stimface)
+                t.at[t_index,'prop_resp'] = list(respface)
 
-                t.at[i,'prop_stim_min'] = min(stimface)
-                t.at[i,'prop_stim_max'] = max(stimface)
-                t.at[i,'prop_stim_range'] = t.prop_stim_max[i] - t.prop_stim_min[i]
+                t.at[t_index,'prop_stim_min'] = min(stimface)
+                t.at[t_index,'prop_stim_max'] = max(stimface)
+                t.at[t_index,'prop_stim_range'] = t.prop_stim_max[t_index] - t.prop_stim_min[t_index]
 
-                if t.subject[i] not in outliers:
+                if t.subject[t_index] not in outliers:
                     slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(stimface,respface)
-                    t.at[i,'prop_slope'] = slope
-                    t.at[i,'prop_intercept'] = intercept
-                    t.at[i,'prop_r2'] = r_value**2
+                    t.at[t_index,'prop_slope'] = slope
+                    t.at[t_index,'prop_intercept'] = intercept
+                    t.at[t_index,'prop_r2'] = r_value**2
                 """
 
         t.loc[:,new_columns].to_csv(f'{temp_folder}\\outcomes_sinus.csv')
