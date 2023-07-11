@@ -15,6 +15,16 @@ def PLV(x,y):
     e = np.exp(1j * (x - y))
     return np.abs(np.sum(e)) / len(e)
 
+def get_phase_lag_FFT(x,y):
+    """
+    Calculate phase lag between two signals x and y using FFT. Calculate the fourier transform of each signal. Returns:
+        phase_rad: phase lag in radians for each bin
+    """
+    xfft = np.fft.fft(x)
+    yfft = np.fft.fft(y)
+    phase_rad = np.angle(xfft/yfft)
+    return phase_rad
+
 def get_peak_heights(ts):
     #Given a time series, return the heights of all peaks. Peaks should be separated by 30 frames
     peaks,properties = signal.find_peaks(ts, distance=30)
