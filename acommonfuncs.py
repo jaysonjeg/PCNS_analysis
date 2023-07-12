@@ -141,9 +141,12 @@ def get_beh_data(taskname,subject,suffix,use_MRI_task,header='infer'):
         print(f"ERROR: {len(contents)} files found for {globstring}\n")
         return None
 
-def get_openface_table(taskname,subject,static_or_dynamic):
-    """Get the OpenFace intermediates .csv for this subject"""
-    globstring = f"{intermediates_folder}\\openface_{taskname}\\{subject}"
+def get_openface_table(taskname,subject,static_or_dynamic,r_or_c='r'):
+    """
+    Get the OpenFace intermediates .csv for this subject
+    r_or_c: 'r' gets raw action unit values, 'c' gets binary classifications
+    """
+    globstring = f"{analysis_folder}\\openface_{taskname}\\{subject}"
     contents = glob(globstring)
     if len(contents) != 1:
         print(f"ERROR: {len(contents)} folders found for {globstring}")
@@ -152,34 +155,7 @@ def get_openface_table(taskname,subject,static_or_dynamic):
     face = pd.read_csv(glob(f"{resultsFolder}\\OpenFace_{static_or_dynamic}\\*_cam_20fps.csv")[0])
     all_frames=np.asarray(face['frame'])
     success=np.array(face[' success'])
-    aus_labels_r = [f' {i}_r' for i in aus_labels] #Convert action unit labels into column labels for OpenFace .csv file
-    aus_labels_c = [f' {i}_c' for i in aus_labels] 
-    aus = face[aus_labels_r] #get all action units' time series for this subject. The rows are numbered from zero, whereas actual frames are numbered from 1. The error (1/20th of a second) is negligible.
-    aus_c = face[aus_labels_c]
+    these_aus_labels = [f' {i}_{r_or_c}' for i in aus_labels] #Convert action unit labels into column labels for OpenFace .csv file
+    aus = face[these_aus_labels] #get all action units' time series for this subject. The rows are numbered from zero, whereas actual frames are numbered from 1. The error (1/20th of a second) is negligible.
     aus.columns=aus_labels #rename columns, for example from ' AU01_r' to 'AU01'
-    aus_c.columns=aus_labels #from ' AU01_c' to 'AU01'
     return all_frames,aus, success
-'''
-def get_redcap(redcap_file = "CogEmotPsych_DATA_2022-10-20_1804.csv"):  
-    """
-    return redcap table
-    """
-
-    redcap_folder = "C:\\Users\\c3343721\\Google Drive\\PhD\\Project_PCNS\\BackupRedcap"
-    redcap_folder="C:\\Users\\Jayson\\Google Drive\\PhD\\Project_PCNS\\BackupRedcap"
-    
-    t=pd.read_csv(f"{redcap_folder}\\{redcap_file}")
-
-    #data.query('pilotorreal==2 & group==2') #another way to get particular data
-
-    healthy=((t.group==1) & (t.pilotorreal==2))
-    clinical=((t.group==2) & (t.pilotorreal==2))
-
-    healthy_attended=((healthy) & (t.attended==1))
-    clinical_attended=((clinical) & (t.attended==1))
-
-    healthy_didmri=((healthy) & (t.attended_fmri==1))
-    clinical_didmri=((clinical) & (t.attended_fmri==1))
-    
-    return t
-'''

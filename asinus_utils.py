@@ -1,5 +1,5 @@
 import numpy as np, pandas as pd
-from scipy import signal
+from scipy import signal,fftpack
 
 time_interval = 0.04 #seconds per frame
 fs = int(1/time_interval) #sampling frequency
@@ -43,8 +43,7 @@ def get_grad_peak_heights(ausn_smoo):
 
 def power_in_band(data,freqs, lowcut,highcut):
     #Returns power in a frequency band, divided by total power
-    from scipy.integrate import simps
-    fft_data = scipy.fftpack.fft(data)
+    fft_data = fftpack.fft(data)
     mask = np.where((freqs >= lowcut) & (freqs <= highcut))
     power_spectrum = np.abs(fft_data)**2
     total_power = np.sum(power_spectrum[0:np.argmax(freqs)])
