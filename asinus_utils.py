@@ -40,3 +40,12 @@ def get_grad_peak_heights(ausn_smoo):
     ausn_smoo_grad_peaks = [get_peak_heights(ausn_smoo_grad[i,:]) for i in range(ausn_smoo_grad.shape[0])]
     ausn_smoo_grad_peaks = np.hstack(ausn_smoo_grad_peaks)
     return ausn_smoo_grad_peaks
+
+def power_in_band(data,freqs, lowcut,highcut):
+    #Returns power in a frequency band, divided by total power
+    from scipy.integrate import simps
+    fft_data = scipy.fftpack.fft(data)
+    mask = np.where((freqs >= lowcut) & (freqs <= highcut))
+    power_spectrum = np.abs(fft_data)**2
+    total_power = np.sum(power_spectrum[0:np.argmax(freqs)])
+    return np.sum(power_spectrum[mask])/total_power  

@@ -77,7 +77,7 @@ def pairplot(t,vars=None,x_vars=None,y_vars=None,height=1.5,include_these=None,k
     if include_these is None:
         include_these=t.iloc[:,0].copy()
         include_these[:]=True #array of all Trues to include all rows
-    sns.set_context('paper')
+    sns.set_context('talk',font_scale=0.6)
     if vars is not None:
         x_vars=vars
         y_vars=vars

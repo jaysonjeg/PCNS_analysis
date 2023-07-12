@@ -12,12 +12,12 @@ Last 3 trials ('final') are feedback present, predictable
 New columns
     use_sinus
     sinus_outliers
-    blinks, max_vals, rapidity, lag_hilbert, lag_fourier (for these columns we have versions for trial types 'initial' and 'final')
+    blinks, amp, rapidity, lag_hilbert, lag_fourier (for these columns we have versions for trial types 'initial' and 'final')
     corrs, plv (for these columns we have versions for all 3 trial types) 
 
 Outcomes: We find the following within each trial, then take the median across each trial type
     blinks: proportion of frames where blink was detected. Can be an index of tiredness
-    max_vals: maximum intensity of AU12 within the trial
+    amp: amplitude, the maximum intensity of AU12 within the trial
     rapidity: rapidity of onset of AU12, specifically the trialwise median of peak heights of gradient
 
     corrs: spearman correlation between stimulus and response AU12 time series
@@ -27,12 +27,8 @@ Outcomes: We find the following within each trial, then take the median across e
     lag_fourier: median phase difference between stimulus and response, calculated using FFT
 
 Questions
-    Do blinks differ between groups?
-    Does max_vals and rapidity decrease from start to end?
-    Are corrs and plv correltaed?
-    Are lag_hilbert and lag_fourier correlated?
+    Does amp and rapidity decrease from start to end?
     Corrs or PLV for jump trials might need to be normalised by the values for initial trials
-    Outcomes like lags, plv, corrs, rapidity might need to be corrected for max_vals
 """
 
 
@@ -55,6 +51,8 @@ from glob import glob
 import scipy.io
 import warnings
 from scipy import signal,stats
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
 from acommonvars import *
 import acommonfuncs
 import asinus_utils
@@ -114,7 +112,7 @@ if __name__=='__main__':
 
     ### Get data
     new_columns = ['use_sinus','sinus_outliers']
-    for string in ['blinks', 'max_vals', 'rapidity', 'lag_hilbert', 'lag_fourier']:
+    for string in ['blinks', 'amp', 'rapidity', 'lag_hilbert', 'lag_fourier']:
         new_columns.append(f'sinus_{string}_initial')
         new_columns.append(f'sinus_{string}_final')
     for string in ['corrs', 'plv']:
@@ -152,7 +150,7 @@ if __name__=='__main__':
 
                 aus = np.transpose(np.dstack(temp) , axes=[2,0,1]) #ntrials (10) * nframes (500) * nAUs (17)
                 blinks = np.array([np.sum(aus[trial,-1,:]>0)/nframes for trial in range(ntrials)]) #proportion of blinks
-                max_vals = np.array([np.max(aus[trial,:,nAU]) for trial in range(ntrials)]) #max intensity of AU12
+                amp = np.array([np.max(aus[trial,:,nAU]) for trial in range(ntrials)]) #max intensity of AU12
 
                 #Normalize each trial's time series to range (0,1)
                 from sklearn import preprocessing 
@@ -171,7 +169,7 @@ if __name__=='__main__':
                 #Rapidity: Get gradient of (0-1)-normalized then smoothed AU time series. Find peaks in the gradient. Then find the median of the peak height. This measures the rapidity of the person's facial response. 
                 ausns_grad_peaks_initial = asinus_utils.get_grad_peak_heights(ausns[trials_bool['initial'],:,nAU])
                 rapidity_initial = np.median(ausns_grad_peaks_initial)
-                ausns_grad_peaks_final = asinus_utils.get_grad_peak_heights(ausns[trials_bool['initial'],:,nAU])
+                ausns_grad_peaks_final = asinus_utils.get_grad_peak_heights(ausns[trials_bool['final'],:,nAU])
                 rapidity_final = np.median(ausns_grad_peaks_final)
 
                 #Spearman correlation between stimulus and response 
@@ -197,12 +195,15 @@ if __name__=='__main__':
                 peak_freq = freqs[1:][peak_freq_index]
                 lag_fourier = np.array([asinus_utils.get_phase_lag_FFT(ausn[i,:,nAU],stim)[peak_freq_index] for i in range(ntrials)]) #phase lag in radians for each trial
 
+                #This code section finds power in each frequency band
+                #psb = np.array([acommonfuncs.power_in_band(ausn[i,:,nAU],freqs,2,4) for i in range(ntrials)])
+
 
                 #Combine outcomes across similar trials
                 blinks_initial = np.median(blinks[trials_bool['initial']])
                 blinks_final = np.median(blinks[trials_bool['final']])
-                max_vals_initial = np.median(max_vals[trials_bool['initial']])
-                max_vals_final = np.median(max_vals[trials_bool['final']])
+                amp_initial = np.median(amp[trials_bool['initial']])
+                amp_final = np.median(amp[trials_bool['final']])
                 corrs_initial = np.median(corrs[trials_bool['initial']])
                 corrs_jump = np.median(corrs[trials_bool['jump']])
                 corrs_final = np.median(corrs[trials_bool['final']])
@@ -216,8 +217,8 @@ if __name__=='__main__':
 
                 t.at[t_index,'sinus_blinks_initial'] = blinks_initial
                 t.at[t_index,'sinus_blinks_final'] = blinks_final
-                t.at[t_index,'sinus_max_vals_initial'] = max_vals_initial
-                t.at[t_index,'sinus_max_vals_final'] = max_vals_final
+                t.at[t_index,'sinus_amp_initial'] = amp_initial
+                t.at[t_index,'sinus_amp_final'] = amp_final
                 t.at[t_index,'sinus_rapidity_initial'] = rapidity_initial
                 t.at[t_index,'sinus_rapidity_final'] = rapidity_final
                 t.at[t_index,'sinus_corrs_initial'] = corrs_initial
@@ -297,11 +298,91 @@ if __name__=='__main__':
         t.loc[:,new_columns].to_csv(f'{temp_folder}\\outcomes_sinus.csv')
 
     """
-    blinks, max_vals, rapidity, lag_hilbert, lag_fourier (for these columns we have versions for trial types 'initial' and 'final')
+    blinks, amp, rapidity, lag_hilbert, lag_fourier (for these columns we have versions for trial types 'initial' and 'final')
     corrs, plv (for these columns we have versions for all 3 trial types) 
     """
 
-    for t_index in range(len(t)):
-        if (t['use_sinus'][t_index]) and (t.subject[t_index] not in outliers):
-            subject=t.subject[t_index]
-            print(f'{c.time()[1]}: Subject {subject}')
+    gps = list(t[group].unique())
+    if '' in gps: gps.remove('')
+    hue = group
+    t2 = t.loc[t.use_sinus & (t[group]!='') & ~t.sinus_outliers,:]
+    sns.set_context('talk',font_scale=0.6)
+
+    from pandas.errors import SettingWithCopyWarning
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=SettingWithCopyWarning)
+        t2['sinus_lag_hilbert_abs_initial'] = np.abs(t2['sinus_lag_hilbert_initial']).values
+        t2['sinus_lag_hilbert_abs_final'] = np.abs(t2['sinus_lag_hilbert_final']).values
+
+    
+    #Are there group differences in |lag| after accounting for rapidity? First use linear regression to predict lag from rapidity, then we ask whether the absolute value of residuals are different between groups
+    model = smf.ols(f'sinus_lag_hilbert_initial ~ sinus_rapidity_initial', data=t2).fit()
+    #get model coefficients
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=SettingWithCopyWarning)
+        t2['sinus_lag_hilbert_res_abs_initial'] = np.abs(model.resid).values
+
+    #Are there group differences in PLV in jump trials after accounting for PLV in initial trials?
+    model = smf.ols(f'sinus_plv_jump ~ sinus_plv_initial', data=t2).fit()
+    #get model coefficients
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=SettingWithCopyWarning)
+        t2['sinus_plv_jump_res'] = np.abs(model.resid).values
+
+    #Are there group differences in PLV after accounting for amplitude?
+    print(f'ANOVA: sinus_plv_initial ~ {group} + sinus_max_val_initial') 
+    print(sm.stats.anova_lm(smf.ols(f'sinus_plv_initial ~ {group} + sinus_amp_initial', data=t2).fit(), typ=2)) 
+
+    #Are there group differences in PLV in jump trials after accounting for PLV in initial trials and amplitude?
+    print(f'ANOVA: sinus_plv_jump ~ {group} + sinus_plv_initial + sinus_max_val_initial') 
+    print(sm.stats.anova_lm(smf.ols(f'sinus_plv_jump ~ {group} + sinus_plv_initial + sinus_amp_initial', data=t2).fit(), typ=2)) 
+
+
+    #compare same outcome in initial and final trials
+    for variable in ['amp','rapidity','corrs','plv','lag_hilbert_abs']:
+        for gp in gps:
+            x=t2.loc[t2[group]==gp,f'sinus_{variable}_initial']
+            y=t2.loc[t2[group]==gp,f'sinus_{variable}_final']
+            print(f'{variable} {gp} diff {y.mean()-x.mean():.2}, p={stats.ttest_rel(x,y).pvalue:.2f}')
+
+    #Compare outcome measures across groups
+    fig,axs=plt.subplots(4,5,figsize=(12,8))
+    outcomes = new_columns[2:] + ['sinus_lag_hilbert_abs_initial','sinus_lag_hilbert_abs_final','sinus_lag_hilbert_res_abs_initial','sinus_plv_jump_res']
+    for i in range(len(outcomes)):
+        ax = axs[np.unravel_index(i,(4,5))]
+        sns.stripplot(ax=ax,data = t2, x=group, hue=hue,palette=colors,y=outcomes[i],legend=False)
+        group1 = t2.loc[t2[group]==gps[0],outcomes[i]]
+        group2 = t2.loc[t2[group]==gps[1],outcomes[i]]
+        diff = group1.mean() - group2.mean()
+        pval = stats.ttest_ind(group1,group2).pvalue
+        ax.set_title(f'diff {diff:.2} p={pval:.2f}')
+        ax.set_ylabel(ax.get_ylabel()[6:])
+    fig.tight_layout()
+
+    #Scatter plots for initial vs jump vs final trial type
+    """
+    grid=acommonfuncs.pairplot(t2,vars=['sinus_blinks_initial','sinus_blinks_final'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+    grid=acommonfuncs.pairplot(t2,vars=['sinus_amp_initial','sinus_amp_final'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+    grid=acommonfuncs.pairplot(t2,vars=['sinus_rapidity_initial','sinus_rapidity_final'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+    grid=acommonfuncs.pairplot(t2,vars=['sinus_corrs_initial','sinus_corrs_jump','sinus_corrs_final'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+    grid=acommonfuncs.pairplot(t2,vars=['sinus_plv_initial','sinus_plv_jump','sinus_plv_final'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+    grid=acommonfuncs.pairplot(t2,vars=['sinus_lag_hilbert_initial','sinus_lag_hilbert_final'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+    grid=acommonfuncs.pairplot(t2,vars=['sinus_lag_hilbert_initial_abs','sinus_lag_hilbert_final_abs'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+    grid=acommonfuncs.pairplot(t2,vars=['sinus_lag_fourier_initial','sinus_lag_fourier_final'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+    """
+
+    #Scatter plots comparing different measures
+    """
+    grid=acommonfuncs.pairplot(t2,vars=['sinus_plv_initial','sinus_corrs_initial'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+    grid=acommonfuncs.pairplot(t2,vars=['sinus_lag_hilbert_initial','sinus_lag_fourier_initial'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+
+    grid=acommonfuncs.pairplot(t2,vars=['sinus_blinks_initial','sinus_amp_initial','sinus_rapidity_initial','sinus_corrs_initial','sinus_plv_initial','sinus_lag_hilbert_initial','sinus_lag_hilbert_abs_initial'],x_vars=None,y_vars=None,height=1.5,kind='reg',robust=True,group=group)
+
+    grid=acommonfuncs.pairplot(t2,x_vars=['sinus_amp_initial','sinus_rapidity_initial','sinus_corrs_initial','sinus_plv_initial','sinus_lag_hilbert_initial','sinus_lag_hilbert_abs_initial'],y_vars=['fsiq2','panss_N','sofas'],height=1.5,kind='reg',robust=True,group=group)
+    """
+
+ 
+
+
+
+    plt.show(block=False)
