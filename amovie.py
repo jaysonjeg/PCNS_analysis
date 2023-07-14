@@ -31,7 +31,6 @@ def get_resampled_time_series(subject,static_or_dynamic,r_or_c):
     detailed = acommonfuncs.get_beh_data('movieDI',subject,'detailed',use_MRI_task=False) #Get detailed webcam frametimes from *detailed.csv
     summary = acommonfuncs.get_beh_data('movieDI',subject,'summary',use_MRI_task=False,header=None) #Get summary data from *summary.csv
 
-
     #### Quality checks
     assert(success.mean() > min_success) #ensure that the webcam was working most of the time
     #Quality checks using the *summary.csv
@@ -40,10 +39,10 @@ def get_resampled_time_series(subject,static_or_dynamic,r_or_c):
         assert(np.abs(summary['movietimestart'] - movie_actual_start_time_sec) < 0.5) #ensure movie started close to when it should have
         assert(np.abs(summary['actualmovietime'] - movie_actual_duration_sec) < 0.5)
    
-    #### Use *detailed.csv to get estimated timestamp for each webcam frame (long)
+    #### Use *detailed.csv to get estimated timestamp for each webcam frame (slow)
     times_eachframe = np.zeros(len(all_frames),dtype=float) #holds the estimated timestamp for each webcam frame
     times_eachframe[:]=np.nan
-    for index in range(aus.shape[0]): #for each row of OpenFace output .csv (corresponding to webcam frames)
+    for index in range(aus_raw.shape[0]): #for each row of OpenFace output .csv (corresponding to webcam frames)
         framenum = index + 1 
         try: #if that webcam frame coincides with any movie frames (appears in data.ptframenums)
             times_eachframe[index]=detailed.fliptimes[detailed.ptframenums==framenum].iloc[0] #find the timestamp of the first loop iteration which corresponds to that webcam frame
@@ -52,7 +51,7 @@ def get_resampled_time_series(subject,static_or_dynamic,r_or_c):
     
     #### Resample action unit time series at 20fps with linear interpolation
     interp_aus=interp1d(times_eachframe,aus_raw,kind='linear',axis=0,fill_value='extrapolate') 
-    aus=interp_aus(times_regular)
+    aus=interp_aus(times_regular).astype(np.float32)
     aus=pd.DataFrame(aus)
     aus.columns = aus.columns #use aus for any downstream analyses
     return aus
@@ -68,7 +67,7 @@ if __name__=='__main__':
         t = acommonfuncs.add_table(t,'outcomes_ricky.csv')
         #t = acommonfuncs.str_columns_to_literals(t,['sinus_ts'])
     else:
-        t=acommonfuncs.add_columns(t,['ricky_aust'])
+        t=acommonfuncs.add_columns(t,['ricky_aussr'])
         t['use_ricky'] = ((include) & (t.valid_movieo==1)) 
         t['ricky_outliers'] = t.subject.isin(outliers)
         #t=acommonfuncs.add_columns(t,['sinus_ts'])
@@ -78,7 +77,15 @@ if __name__=='__main__':
                 print(f'{c.time()[1]}: Subject {subject}')
                 aussr = get_resampled_time_series(subject,'static','r')
 
-                t.at[t_index,'ricky_aust'] = aust
-                if subject=='009': assert(0)
+                t.at[t_index,'ricky_aussr'] = aussr
+                if subject=='009': break
 
         #t.loc[:,new_columns].to_csv(f'{temp_folder}\\outcomes_ricky.csv')
+
+
+    valid_indices = (t.use_ricky) & (~t.ricky_outliers)
+    valid_indices = t.subject.isin(['005','006','007'])
+    #t.loc[valid_indices,'ricky_aussr']
+
+    #apply valid_indices to original dataframe t to get a reduced version.
+    #apply valid_indices to t filled with aussr, then convert into a 3D array of aussr's. 
