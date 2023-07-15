@@ -48,7 +48,7 @@ if __name__=='__main__':
 
     ### SETTABLE PARAMETERS 
     group = 'group02' #the grouping variable
-    load_table=False
+    load_table=True
 
     ### Get data
     new_columns = ['use_prop','prop_outliers','prop_stim', 'prop_resp','prop_stim_min','prop_stim_max','prop_stim_range','prop_slope','prop_intercept','prop_r2']

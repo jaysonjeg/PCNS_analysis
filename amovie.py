@@ -29,7 +29,10 @@ def get_resampled_time_series(subject,static_or_dynamic,r_or_c):
     #### Get the data
     all_frames,aus_raw,success = acommonfuncs.get_openface_table('movieDI',subject,static_or_dynamic,r_or_c) #Get the OpenFace output .csv for this subject. all_frames is just all integers from 1 to total number of frames. aus is dataframe of nwebcamframes * nAUs. success is a boolean array of length nwebcamframes, indicating whether OpenFace was able to detect a face in that frame
     detailed = acommonfuncs.get_beh_data('movieDI',subject,'detailed',use_MRI_task=False) #Get detailed webcam frametimes from *detailed.csv
-    summary = acommonfuncs.get_beh_data('movieDI',subject,'summary',use_MRI_task=False,header=None) #Get summary data from *summary.csv
+    try: #a few subjects don't have a summary file
+        summary = acommonfuncs.get_beh_data('movieDI',subject,'summary',use_MRI_task=False,header=None) #Get summary data from *summary.csv
+    except:
+        summary = None
 
     #### Quality checks
     assert(success.mean() > min_success) #ensure that the webcam was working most of the time
@@ -67,20 +70,36 @@ if __name__=='__main__':
         t = acommonfuncs.add_table(t,'outcomes_ricky.csv')
         #t = acommonfuncs.str_columns_to_literals(t,['sinus_ts'])
     else:
-        t=acommonfuncs.add_columns(t,['ricky_aussr'])
+        new_columns = ['use_ricky','ricky_outliers','ricky_aussr','ricky_ausdc']
+        t=acommonfuncs.add_columns(t,new_columns[2:])
         t['use_ricky'] = ((include) & (t.valid_movieo==1)) 
         t['ricky_outliers'] = t.subject.isin(outliers)
         #t=acommonfuncs.add_columns(t,['sinus_ts'])
         for t_index in range(len(t)):
+            subject=t.subject[t_index]
             if (t['use_ricky'][t_index]) and (t.subject[t_index] not in outliers):
-                subject=t.subject[t_index]
                 print(f'{c.time()[1]}: Subject {subject}')
                 aussr = get_resampled_time_series(subject,'static','r')
-
                 t.at[t_index,'ricky_aussr'] = aussr
-                if subject=='009': break
+                #ausdc = get_resampled_time_series(subject,'dynamic','c')
+                #t.at[t_index,'ricky_ausdc'] = ausdc
+                
+            if subject=='020': 
+                print(f'stopped at subject {subject}')
+                break
 
         #t.loc[:,new_columns].to_csv(f'{temp_folder}\\outcomes_ricky.csv')
+        t.loc[:,new_columns].to_csv("C:\\Users\\c3343721\\Documents\\PCNS\\Data\\Data_analysis\\temp\\outcomes_ricky.csv")
+
+    def array_to_list(array):
+        #convert a 2D array to a list of lists
+        return list([list(i) for i in array])
+
+    t0=t.copy()
+for i in range(t.shape[0]): 
+    element = t.at[i,'ricky_aussr']
+    if type(element)==pd.DataFrame:
+        t.at[i,'ricky_aussr'] = list([list(i) for i in element.values])
 
 
     valid_indices = (t.use_ricky) & (~t.ricky_outliers)

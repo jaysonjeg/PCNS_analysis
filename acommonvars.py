@@ -31,18 +31,19 @@ Sets 'data_folder', 'intermediates_folder', and 'redcap_file' to correct paths
 
 if os.environ['COMPUTERNAME']=='HDR-879SN13': 
     pc='laptop' #only works on Windows
-    files_source='NEWYSNG'
+    files_source='local' #local for 'Documents'
 elif os.environ['COMPUTERNAME']=='DESKTOP-EGSQF3A': 
     pc='home'
     files_source='local' #'local' for local machine, or else 'NEWYSNG' for shared drive
 
 print(f'Running on {pc}. Data files in {files_source}')
 
-if pc=='laptop' and files_source=='NEWYSNG':
-    #data_folder="Z:\\Shiami_DICOM\\Psychosis\\PCNS"
-    #top_folder = "Z:\\NEWYSNG\\PCNS\\Data"
-    top_folder = "Z:\\PCNS\\Data"
-    redcap_file = "Z:\\PCNS\\Data\\CogEmotPsych_DATA_2023-06-16_0813.csv"
+if pc=='laptop':
+    if files_source=='NEWYSNG':
+        top_folder = "Z:\\PCNS\\Data"
+    elif files_source=='local':
+        top_folder = "C:\\Users\\c3343721\\Documents\\PCNS\\Data"
+    redcap_file = f"{top_folder}\\CogEmotPsych_DATA_2023-06-16_0813.csv"
 elif pc=='home':
     if files_source == 'NEWYSNG':
         top_folder = "Z:\\NEWYSNG\\PCNS\\Data"
