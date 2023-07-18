@@ -37,7 +37,7 @@ elif os.environ['COMPUTERNAME']=='DESKTOP-EGSQF3A':
     files_source='local' #'local' for local machine, or else 'NEWYSNG' for shared drive
 
 print(f'Running on {pc}. Data files in {files_source}')
-
+#X
 if pc=='laptop':
     if files_source=='NEWYSNG':
         top_folder = "Z:\\PCNS\\Data"
