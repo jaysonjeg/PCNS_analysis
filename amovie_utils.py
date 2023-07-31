@@ -54,6 +54,20 @@ def get_all_resampled_time_series(static_or_dynamic,r_or_c,t,valid,times_regular
         all_aus[i,:,:] = get_resampled_time_series(subject,static_or_dynamic,r_or_c,times_regular).values
     return all_aus
 
+def plot_sample_time_series(action_unit,aus_labels,times_regular,aussr,ausdr,ausdc,valid,t):
+    nAU = np.where(np.array(aus_labels)==action_unit)[0][0]
+    ids = [0,5,10,15,20,25,30,35,40]
+    fig,axs=plt.subplots(3,3)
+    for i in range(9):
+        ax = axs[np.unravel_index(i,(3,3))]
+        ax.plot(times_regular,aussr[ids[i],:,nAU],color='b',alpha=0.4)
+        ax.plot(times_regular,ausdr[ids[i],:,nAU],color='r',alpha=0.4)
+        ax.plot(times_regular,ausdc[ids[i],:,nAU],color='darkred',alpha=0.4)
+        ax.set_title(f'{t.subject[valid[ids[i]]]}')
+        ax.set_xlabel('time')
+        ax.set_ylabel(action_unit)
+    fig.tight_layout()
+
 def get_aus_df_long(aus,action_unit,aus_labels,group,times_regular,tgroup):
     #Given 3Darray of action unit time series for all subjects, return data for just one AU in long format with columns for subject, group, time and AU intensity
     nAU = np.where(np.array(aus_labels)==action_unit)[0][0]
@@ -70,8 +84,8 @@ def get_AU_df(aus,action_unit,aus_labels,tgroup,group):
     array2D = aus[:,:,nAU]
     def apply(func):
         return pd.Series(func(array2D,axis=1),dtype=np.float32)
-    strings = [f'{action_unit}_{i}' for i in ['mean','std','median','mad']]
-    series = [apply(i) for i in [np.mean,np.std,np.median,stats.median_abs_deviation]]
+    strings = [f'{action_unit}_{i}' for i in ['mean','std','median','mad','cv']]
+    series = [apply(i) for i in [np.mean,np.std,np.median,stats.median_abs_deviation,stats.variation]]
     dictionary = {key:value for key,value in zip(strings,series)}
     dictionary[group] = pd.Series(tgroup.values , dtype = 'str')
     return pd.DataFrame(dictionary)
@@ -84,10 +98,12 @@ def compare(aus,outcome,aus_labels,gps,tgroup,group,colors,title=''):
         ax = axs[np.unravel_index(i,(4,4))]
         df = get_AU_df(aus,action_unit,aus_labels,tgroup,group)
         sns.stripplot(ax=ax,data = df, x=group, hue=group,palette=colors,y=string,legend=False)
-        group1 = df.loc[df[group]==gps[0],string]
-        group2 = df.loc[df[group]==gps[1],string]
+        group1 = df.loc[df[group]==gps[0],string].dropna()
+        group2 = df.loc[df[group]==gps[1],string].dropna()
         diff = group1.mean() - group2.mean()
-        pval = stats.ttest_ind(group1,group2).pvalue
-        ax.set_title(f'diff {diff:.2} p={pval:.2f}')
+        diff_median = np.median(group1) - np.median(group2)
+        p_ttest = stats.ttest_ind(group1,group2).pvalue
+        p_MW = stats.mannwhitneyu(group1,group2).pvalue
+        ax.set_title(f'Dmean {diff:.2} ttest p={p_ttest:.2f} Dmed {diff_median:.2f} MW p={p_MW:.2f}')
     fig.suptitle(title)
     fig.tight_layout()
