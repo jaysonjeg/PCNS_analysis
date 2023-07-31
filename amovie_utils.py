@@ -92,18 +92,24 @@ def get_AU_df(aus,action_unit,aus_labels,tgroup,group):
 
 def compare(aus,outcome,aus_labels,gps,tgroup,group,colors,title=''):
     fig,axs=plt.subplots(4,4,figsize=(12,8))
+    out = []
     for i in range(len(aus_labels)):
         action_unit = aus_labels[i]
         string = f'{action_unit}_{outcome}'
         ax = axs[np.unravel_index(i,(4,4))]
         df = get_AU_df(aus,action_unit,aus_labels,tgroup,group)
-        sns.stripplot(ax=ax,data = df, x=group, hue=group,palette=colors,y=string,legend=False)
+        df = df[tgroup.values!='']
+        sns.stripplot(ax=ax,data = df, x=group, hue=group,palette=colors,y=string)
         group1 = df.loc[df[group]==gps[0],string].dropna()
         group2 = df.loc[df[group]==gps[1],string].dropna()
         diff = group1.mean() - group2.mean()
         diff_median = np.median(group1) - np.median(group2)
-        p_ttest = stats.ttest_ind(group1,group2).pvalue
+        ttest = stats.ttest_ind(group1,group2)
+        p_ttest = ttest.pvalue
+        out.append(ttest.statistic)
+
         p_MW = stats.mannwhitneyu(group1,group2).pvalue
         ax.set_title(f'Dmean {diff:.2} ttest p={p_ttest:.2f} Dmed {diff_median:.2f} MW p={p_MW:.2f}')
     fig.suptitle(title)
     fig.tight_layout()
+    return out

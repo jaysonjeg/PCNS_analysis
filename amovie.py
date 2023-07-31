@@ -27,14 +27,14 @@ c = acommonfuncs.clock()
 
 if __name__=='__main__':
 
-    group = 'group02' #the grouping variable
+    group = 'group03' #the grouping variable
     load_array=True
     load_table=True
+    if group!='group02': assert(load_array==True and load_table==True)
     outliers = []
 
     t['use_ricky'] = ((include) & (t.valid_movieo==1)) 
     t['ricky_outliers'] = t.subject.isin(outliers)
-
 
     valid_bool = (t.use_ricky) & (~t.ricky_outliers) #logical array of which subjects to include
     valid = np.where(valid_bool)[0] #indices in dataframe 't', of which subjects to include
@@ -82,16 +82,16 @@ if __name__=='__main__':
                 t.at[t_index,f'ricky_dc_{action_unit}_mean'] = ausdc_mean[i,nAU]
         t.loc[:,new_columns].to_csv(f'{temp_folder}\\outcomes_ricky.csv')
     
-    
+    """
+    #normalize on axis 1 to 0 mean and unit variance    
     from sklearn import preprocessing
-    #normalize on axis 1 to 0 mean and unit variance
     aussr_permute = np.transpose(aussr,[1,0,2])
     aussrn = preprocessing.StandardScaler().fit_transform(aussr_permute.reshape(aussr_permute.shape[0], -1)).reshape(aussr_permute.shape)
     aussrn = np.transpose(aussrn,[1,0,2])
     
 
-    aussrn_mean = np.mean(aussrn,axis=0)
     #plot distance from mean time series, for each subject
+    aussrn_mean = np.mean(aussrn,axis=0)
     def distance(x,y):
         #this function, given two 2D arrays x and y, return a distance measure between them
         diff = x-y
@@ -100,18 +100,23 @@ if __name__=='__main__':
     dists = [distance(aussrn[i,:,:],aussrn_mean) for i in range(aussrn.shape[0])]
     z=pd.DataFrame(tgroup)
     z['dists'] = dists
-    sns.stripplot(data=z,x='group02',hue='group02',palette=colors,y='dists') 
+    sns.stripplot(data=z[tgroup!=''],x=group,hue=group,palette=colors,y='dists') 
     plt.title('Distance from mean time series')
-
+    """
     
     nAU = np.where(np.array(aus_labels)=='AU12')[0][0]
-    
-    #K-means clustering
-    array3D = aussrn
+
+    compare = lambda aus,outcome,title: amovie_utils.compare(aus,outcome,aus_labels,gps,tgroup,group,colors,title=title)
+    out = compare(aussr,'mean','sr')
+
+
+    #K-means clustering and whether subjects are in the 'most common' state at any time point
+    """
+    array3D = aussrn #use normalized time series
     array_stacked = np.reshape(array3D,[array3D.shape[0]*array3D.shape[1],array3D.shape[2]])
     #use sklearn to do kmeans clustering of 2D array array_stacked with 10 clusters
     from sklearn.cluster import KMeans
-    kmeans = KMeans(init='k-means++',n_init='auto',n_clusters=10, random_state=0,algorithm='elkan').fit(array_stacked)
+    kmeans = KMeans(init='k-means++',n_clusters=8, random_state=0).fit(array_stacked)
     #get the cluster labels for each row of array_stacked
     labels_1D = kmeans.labels_
     #reshape the labels array to be 3D
@@ -122,19 +127,40 @@ if __name__=='__main__':
         cluster_means[cluster,:] = np.mean(array_stacked[labels_1D==cluster,:],axis=0)
     #get the most common value in each row of labels
     from scipy.stats import mode
-    labels_mode = np.squeeze(mode(labels,axis=1).mode)
-    
+    labels_mode = np.squeeze(mode(labels,axis=0).mode)
+    fig,ax=plt.subplots(4)
+    ax[0].scatter(times_regular,labels_mode)
+    ax[1].hist(labels_mode)
+    ax[2].hist(labels.ravel())
+    ax[3].imshow(cluster_means,aspect='auto')
 
-    '''
+    from matplotlib import cm
+    fig,ax=plt.subplots(len(gps))
+    for i in range(len(gps)):
+        ax[i].set_title(gps[i])
+        plot = ax[i].imshow(labels[tgroup==gps[i],:],cmap=cm.get_cmap('Set1',8),aspect='auto')
+        ax[i].set_xlabel('Time (sec)')
+        fig.colorbar(plot,ax=ax)
+
+    in_most_common_state = labels==labels_mode
+    time_in_most_common_state = in_most_common_state.mean(axis=1)
+    z=pd.DataFrame(tgroup)
+    z['time_in_most_common_state'] = time_in_most_common_state
+    fig,ax=plt.subplots()
+    sns.stripplot(data=z[tgroup!=''],x=group,hue=group,palette=colors,y='time_in_most_common_state',ax=ax) 
+    ax.set_title('time_in_most_common_state')
+    """
+
     #Plot sample time series
-    
+    """
     plot_sample_time_series = lambda action_unit: amovie_utils.plot_sample_time_series(action_unit,aus_labels,times_regular,aussr,ausdr,ausdc,valid,t)
     plot_sample_time_series('AU12')
     plot_sample_time_series('AU17')
-    
+    """
     
     #Plot group-mean time series with confidence interval
-    
+    """
+    print(c.time()[1]) 
     aussr_12_long = amovie_utils.get_aus_df_long(aussr,'AU12',aus_labels,group,times_regular,tgroup)
     #ausdr_12_long = amovie_utils.get_aus_df_long(ausdr,'AU12',aus_labels,group,times_regular,tgroup)
     ausdc_12_long = amovie_utils.get_aus_df_long(ausdc,'AU12',aus_labels,group,times_regular,tgroup)
@@ -148,8 +174,9 @@ if __name__=='__main__':
     axs[1].set_title('dr')
     axs[2].set_title('dc')
     print(c.time()[1])
+    """
     
-    
+    '''
     get_AU_df = lambda aus,outcome: amovie_utils.get_AU_df(aus,outcome,aus_labels,tgroup,group)
     df=get_AU_df(aussr,'AU12')
  
@@ -174,14 +201,14 @@ if __name__=='__main__':
     compare(aussr,'cv','sr')
     #compare(aussr,'cv','dr')
     
-    '''
+    
     
     t2 = t.loc[t.use_ricky & (t[group]!='') & ~t.subject.isin(outliers),:]
 
     grid=acommonfuncs.pairplot(t2,x_vars=['ricky_sr_AU06_mean','ricky_sr_AU14_mean','ricky_dc_AU10_mean','ricky_dc_AU17_mean','ricky_sr_AU12_cv'],y_vars=['fsiq2'],height=1.5,kind='reg',robust=True,group=group)
 
     grid=acommonfuncs.pairplot(t2.loc[cc,:],x_vars=['ricky_sr_AU06_mean','ricky_sr_AU14_mean','ricky_dc_AU10_mean','ricky_dc_AU17_mean','ricky_sr_AU12_cv'],y_vars=['panss_bluntedaffect','panss_N','sofas','meds_chlor'],height=1.5,kind='reg',robust=True,group=group)
-    
+    '''    
 
 
     plt.show(block=False)
