@@ -154,3 +154,4 @@ t['panss_bluntedaffect']=panss_bluntedaffect
 t['panss_anxiety']=panss_anxiety
 t['panss_tension']=panss_tension
 #'meds_chlor' for chlor equivalents, 'cgi_s' for CGI, 'sofas' for SOFAS
+
