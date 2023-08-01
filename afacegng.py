@@ -22,7 +22,7 @@ if __name__=='__main__':
 
     ### SETTABLE PARAMETERS 
     group = 'group02' #the grouping variable
-    load_table=True
+    load_table=False
 
     ### Get reaction time data
     new_columns = ['use_facegng', 'gng_RT_fear', 'gng_RT_calm']

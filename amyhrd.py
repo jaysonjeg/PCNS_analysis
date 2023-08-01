@@ -179,7 +179,6 @@ if __name__=='__main__':
     print(stats.loc['mu_alpha','hdi_97%'])
     """
 
-
     #Get confidence rating outliers
     Intero_confidence_out = t.loc[t.use_hrd & t[group]!='','hrd_Intero_Q_confidence_occurence_max'] > 0.65
     Extero_confidence_out = t.loc[t.use_hrd & t[group]!='','hrd_Extero_Q_confidence_occurence_max'] > 0.65
@@ -223,6 +222,7 @@ if __name__=='__main__':
         HR_zscores = zscore(t.hrd_Intero_bpm_mean,nan_policy='omit')
         not_outliers = (np.abs(Extero_zscores)<outlier_cutoff) & (np.abs(Intero_zscores)<outlier_cutoff) #define outliers as being more than 3 standard deviations from the mean for exteroceptive or interoceptive thresholds. 3/84 outliers leaving 81
     elif outlier_method=='madmedianrule':
+        """
         Extero_hc_out = pg.madmedianrule(t.loc[t.use_hrd & hc,'hrd_Extero_threshold']) #2 out
         Extero_PT_out = pg.madmedianrule(t.loc[t.use_hrd & eval(PT),'hrd_Extero_threshold']) #6 out
         Intero_hc_out = pg.madmedianrule(t.loc[t.use_hrd & hc,'hrd_Intero_threshold']) #1 out
@@ -233,6 +233,7 @@ if __name__=='__main__':
         PT_not_outliers = amyhrd_utils.get_outliers(t,t.loc[t.use_hrd & eval(PT),'record_id'],PT_out)
         not_outliers = hc_not_outliers & PT_not_outliers #10/84 outliers leaving 74
         print(f'There are {(~not_outliers).sum()} outlier subjects')
+        """
 
 
     #save a reduced set of columns, for use in other scripts

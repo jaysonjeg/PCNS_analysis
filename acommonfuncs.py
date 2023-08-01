@@ -107,7 +107,7 @@ def scatter(t,groupvar,column1,column2,robust=False,include_these=None,ax=None):
     if ax is None:
         fig.tight_layout()
 
-def scatter_multi(df,groupvar,list_of_col_pairs,dim=(3,4),figsize=(16,8),include_these=None,robust=False,ax=None):
+def scatter_multi(df,groupvar,list_of_col_pairs,dim=(3,4),figsize=(18,9),include_these=None,robust=False,ax=None):
     fig,axs = plt.subplots(*dim,figsize=figsize)
     for i in range(len(list_of_col_pairs)):
         column1,column2 = list_of_col_pairs[i]
@@ -182,8 +182,8 @@ def pairplot(t,vars=None,x_vars=None,y_vars=None,height=1.5,include_these=None,k
     for i in range(len(x_vars)):
         for j in range(len(y_vars)):
             if (vars is None) or (j>i):
-                if robust: corr_func = spearmanr
-                else: corr_func= pearsonr
+                if robust: corr_func = stats.spearmanr
+                else: corr_func= stats.pearsonr
                 title=''
                 for group in groups:
                     x = t.loc[include_these & eval(group),x_vars[i]]

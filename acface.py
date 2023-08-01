@@ -58,11 +58,11 @@ times_trial_regular = np.arange(0,relevant_timestamps[-1],1/target_fps) #new tim
 def get_outcomes(subject):
     print(f'{c.time()[1]}: sub {subject}')
     all_frames,aus,success = acommonfuncs.get_openface_table('cface1',subject,static_or_dynamic) #Get the OpenFace intermediates .csv for this subject
-
     webcam_frames_success_proportion = np.sum(success)/len(success)
     if webcam_frames_success_proportion < min_success:
         print(f"WARNING: {subject} has only {webcam_frames_success_proportion:.3f} proportion of successful frames. Returning nan.")
         keys = ['amp_max','amp_range','mean_ts','mean_ts_pca']
+        t.loc[t.record_id == int(subject),'use_cface']=False
         return {key:np.nan for key in keys}
 
     df = acommonfuncs.get_beh_data('cface1',subject,'out',use_MRI_task=False) #Get behavioural data from *out.csv
@@ -190,7 +190,9 @@ def get_outcomes(subject):
     return {'amp_max':ha_AU_trial_ha_max, 'amp_range':ha_AU_trial_ha_range,'mean_ts': aus_trial_mean,'mean_ts_pca':aus_trial_pca_mean, 'other_metrics':other_metrics}
     #return ha_AU_trial_ha_max
 
-load_table=True
+print(t.use_cface.sum())
+
+load_table=False
 if load_table:
     t = pd.read_csv(f'{temp_folder}\\outcomes_cface_face.csv')
     #When csv is saved, elements which are lists are saved as strings. We need to convert them back to lists.
@@ -215,7 +217,6 @@ else:
                 t.at[t_index,'cface_mean_ts_ha_pca0'] = list(outcomes['mean_ts_pca']['ha'][:,0])
                 t.at[t_index,'cface_mean_ts_an_pca0'] = list(outcomes['mean_ts_pca']['an'][:,0])
                 t.at[t_index,'cface_mean_ts_ha_au12'] = list(outcomes['mean_ts']['ha'][:,ha_AU_index])
-                
                 r_validperc,r_latencies,r_durations,r_maxgrads=acface_utils.extract_subject_result(outcomes['other_metrics']['ha'],n_trialsperemotion)
                 t.at[t_index,'cface_latencies_validperc_ha'] = r_validperc
                 t.at[t_index,'cface_latencies_ha'] = r_latencies
@@ -233,8 +234,12 @@ else:
                 #acface_utils.plot_this_au_trial(outcomes['other_metrics']['an'],'an - comp0',times_trial_regular,relevant_timestamps,relevant_labels,midpoint_timestamps,plot_relevant_timestamps=False,results=outcomes['other_metrics']['an'])          
             else:
                 t.at[t_index,'cface_goodwebcam']=False
-        t.to_csv(f'{temp_folder}\\outcomes_cface_face.csv')
 
+
+    new_columns = ['use_cface','cface_mean_ts_ha_pca0','cface_mean_ts_an_pca0','cface_mean_ts_ha_au12','cface_latencies_ha','cface_durations_ha','cface_latencies_an','cface_durations_an','cface_goodwebcam','cface_amp_max_mean','cface_amp_range_mean','cface_amp_max_slope','cface_latencies_validperc_ha','cface_latencies_validperc_an','cface_latencies_mean_ha','cface_latencies_mean_an','cface_durations_mean_ha','cface_durations_mean_an','cface_maxgrads_mean_ha','cface_maxgrads_mean_an','cface_goodwebcam']
+    t.loc[:,new_columns].to_csv(f'{temp_folder}\\outcomes_cface_face.csv')
+
+print(t.use_cface.sum())
 
 import seaborn as sns
 from scipy.stats import ttest_ind
