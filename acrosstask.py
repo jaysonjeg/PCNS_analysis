@@ -46,31 +46,8 @@ if True:
     acommonfuncs.str_columns_to_literals(t,['cface_mean_ts_ha_pca0','cface_mean_ts_an_pca0','cface_mean_ts_ha_au12'])
 
 if True:
-    #HRD task: hrd_Intero_bpm_mean, hrd_Intero_RR_std, 
-    acommonfuncs.add_table(t,'outcomes_myhrd.csv')
-
-    psychometric_type = 'Bay' #psi or Bay
-    metacog_type = 'Bay' #MLE or Bay
-    intero_adjust_method = 'none' #'regress_extero', 'add7', 'none'
-    print(f'Adjusting interoceptive thresholds by {intero_adjust_method}')
-    outlier_method = 'zscore' #'zscore' or 'madmedianrule'
-    outlier_cutoff = 3 #z-score for outlier cutoff. Could use MAD-median method in pingoin instead
-    print(f'Outlier rule is {outlier_method}')
-
-    for cond in ['Intero','Extero']: #which version of each outcome measure to use
-        t[f'hrd_{cond}_threshold'] = t[f'hrd_{cond}_threshold_{psychometric_type}'] #options psi, Bay
-        t[f'hrd_{cond}_slope'] = t[f'hrd_{cond}_slope_{psychometric_type}'] #options psi, Bay
-        t[f'hrd_{cond}_meta_d'] = t[f'hrd_{cond}_meta_d_{metacog_type}'] #options MLE, Bay
-        t[f'hrd_{cond}_m_ratio'] = t[f'hrd_{cond}_m_ratio_{metacog_type}'] #options MLE, Bay
-    from scipy.stats import zscore
-    if outlier_method=='zscore':
-        Extero_zscores = zscore(t.hrd_Extero_threshold,nan_policy='omit')
-        Intero_zscores = zscore(t.hrd_Intero_threshold,nan_policy='omit')
-        HR_zscores = zscore(t.hrd_Intero_bpm_mean,nan_policy='omit')
-        not_outliers = (np.abs(Extero_zscores)<outlier_cutoff) & (np.abs(Intero_zscores)<outlier_cutoff) #define outliers as being more than 3 standard deviations from the mean for exteroceptive or interoceptive thresholds. 3/84 outliers leaving 81
-    t['hrd_outliers'] = ~not_outliers
-    t['hrd_Intero_threshold_abs'] = np.abs(t.hrd_Intero_threshold)
-    t['hrd_Extero_threshold_abs'] = np.abs(t.hrd_Extero_threshold)
+    #HRD task: hrd_Intero_bpm_mean, hrd_Intero_RR_std, hrd_Intero_threshold_abs, hrd_Intero_slope
+    acommonfuncs.add_table(t,'outcomes_myhrd_reduced.csv')
 
 
 group='group03'
