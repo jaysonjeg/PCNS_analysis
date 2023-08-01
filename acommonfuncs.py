@@ -4,7 +4,9 @@ Contains functions used by different scripts in roject_PCNS/Code_analysis
 import numpy as np, pandas as pd, datetime
 from glob import glob
 import seaborn as sns
-from scipy.stats import ttest_ind,mannwhitneyu,pearsonr,spearmanr
+from scipy import stats
+from sklearn.linear_model import LinearRegression, TheilSenRegressor
+import matplotlib.pyplot as plt
 from acommonvars import *
 
 class clock():
@@ -47,15 +49,15 @@ def str_columns_to_literals(t,columns):
 def normalize(data):
     return (data - np.min(data)) / (np.max(data) - np.min(data))
 
-    
+""" 
 def corr(t,group,column_name1, column_name2, robust=True,include_these=None):
     if include_these is None:
         include_these=t.iloc[:,0].copy()
         include_these[:]=True #array of all Trues to include all rows
     if robust: 
-        corr_func = spearmanr
+        corr_func = stats.spearmanr
     else: 
-        corr_func= pearsonr
+        corr_func= stats.pearsonr
     x = t.loc[t.use_hrd & include_these & eval(group),column_name1]
     y = t.loc[t.use_hrd & include_these & eval(group),column_name2]
     r,p = corr_func(x,y)
@@ -68,6 +70,95 @@ def corr_2groups(t,group1,group2,column_name1,column_name2,robust=True,include_t
         r,p=corr(t,group,column_name1,column_name2,robust=robust,include_these=include_these)
         title_string += f'{group}: r={r:.2f} p={p:.2f}, '
     print(title_string)   
+"""
+
+def scatter(t,groupvar,column1,column2,robust=False,include_these=None,ax=None):
+    """
+    Scatter plot of column_name1 vs column_name2 from DataFrame t. Scatter points are colored by group. Put correlation within each group on the title. Also plot a line of best fit for each group
+    """
+    if include_these is None:
+        include_these=t.iloc[:,0].copy()
+        include_these[:]=True #array of all Trues to include all rows
+    if robust: 
+        corr_func=stats.spearmanr #could use skipped correlations in pingouin instead
+        reg_func = TheilSenRegressor
+    else: 
+        corr_func= stats.pearsonr
+        reg_func = LinearRegression
+    if ax is None:
+        fig,ax=plt.subplots()
+    if robust: title_string = 'Robust: '
+    else: title_string = 'Non-robust: '
+    groups = [i for i in np.unique(t[groupvar]) if i != '']
+    for group in groups:
+        x = t.loc[include_these & eval(group),column1]
+        y = t.loc[include_these & eval(group),column2]
+        r,p = corr_func(x,y)
+        xnew = np.linspace(min(x),max(x),100)
+        reg = reg_func().fit(x.values.reshape(-1,1),y.values)
+        ynew = reg.predict(xnew.reshape(-1,1))
+        ax.scatter(x,y,label=group,color=colors[group])
+        ax.plot(xnew,ynew,color=colors[group])
+        title_string += f'{group}: r={r:.2f} p={p:.2f}, '
+    ax.set_xlabel(column1)
+    ax.set_ylabel(column2)
+    ax.set_title(title_string[:-2])
+    ax.legend()
+    if ax is None:
+        fig.tight_layout()
+
+def scatter_multi(df,groupvar,list_of_col_pairs,dim=(3,4),figsize=(16,8),include_these=None,robust=False,ax=None):
+    fig,axs = plt.subplots(*dim,figsize=figsize)
+    for i in range(len(list_of_col_pairs)):
+        column1,column2 = list_of_col_pairs[i]
+        ax = axs[np.unravel_index(i,dim)]
+        scatter(df,groupvar,column1,column2,include_these=include_these,robust=robust,ax=ax)
+    fig.tight_layout()
+
+def compare(df,groupvar,column,include_these=None,robust=False,to_plot=True,ax=None):
+    """
+    For each outcome, plot strip-plot of distribution for each clinical group, and display t-test of difference.
+    df is a dataframe. group is the column name for grouping variable. 
+    Make sure that there are no empty strings '' in the group column
+    """
+    if include_these is None:
+        include_these=t.iloc[:,0].copy()
+        include_these[:]=True #array of all Trues to include all rows
+    groups = [i for i in np.unique(df[groupvar]) if i != '']
+    x = df.loc[df[groupvar]==groups[0],column].dropna()
+    y = df.loc[df[groupvar]==groups[1],column].dropna()
+    diff = x.mean() - y.mean()
+    if robust==True:
+        pval = stats.mannwhitneyu(x,y).pvalue
+        test_string='MW'
+    else:
+        pval = stats.ttest_ind(x,y).pvalue
+        test_string='ttest'
+    if to_plot:
+        if ax is None:
+            fig,ax=plt.subplots()
+        sns.stripplot(ax=ax,data=df.loc[df[groupvar]!='',:],x=groupvar,hue=groupvar,palette=colors,y=column,alpha=0.5)
+        ax.set_title(f'diff {diff:.2f} {test_string} p={pval:.2f}')
+        ax.set_ylabel(column)
+        if ax is None:
+            fig.tight_layout()
+    else:
+        print(f'{column}\t {groups[0]} - {groups[1]}:\t diff={diff:.2f}, {test_string} p={pval:.2f}')
+
+def compare_multi(df,group,columns,dim=(3,4),figsize=(16,8),include_these=None,robust=False,to_plot=True,ax=None):
+    """
+    For each outcome, plot strip-plot of distribution for each clinical group, and display t-test of difference.
+    df is a dataframe. group is the column name for grouping variable. columns is a list of column names in df. dim is a tuple of the dimensions of the subplot grid. 
+    Make sure that there are no empty strings '' in the group column
+    """
+    if to_plot:
+        fig,axs = plt.subplots(*dim,figsize=figsize)
+    for i in range(len(columns)):
+        column=columns[i]
+        ax = axs[np.unravel_index(i,dim)]
+        compare(df,group,column,include_these=include_these,robust=robust,to_plot=to_plot,ax=ax)
+    if to_plot:
+        fig.tight_layout()
 
 def pairplot(t,vars=None,x_vars=None,y_vars=None,height=1.5,include_these=None,kind='reg',robust=True,group='group03',title=''):
     """
@@ -106,8 +197,8 @@ def pairplot(t,vars=None,x_vars=None,y_vars=None,height=1.5,include_these=None,k
             x = t.loc[include_these & eval(groups[0]),vars[i]]
             y = t.loc[include_these & eval(groups[1]),vars[i]]
             mean_diff = np.mean(x)-np.mean(y)
-            p_ttest = ttest_ind(x,y).pvalue
-            p_MW = mannwhitneyu(x,y).pvalue
+            p_ttest = stats.ttest_ind(x,y).pvalue
+            p_MW = stats.mannwhitneyu(x,y).pvalue
             grid.axes[i,i].set_title(f'{groups[0]}-{groups[1]}={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
         grid.fig.tight_layout(pad=0,w_pad=0,h_pad=0.5)
     return grid

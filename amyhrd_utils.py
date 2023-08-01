@@ -44,63 +44,6 @@ def from_bool_in_t_get_bool_in_df(t,df,bool_in_t):
     return to_include
     """
 
-def compare(t,subgroup1,subgroup2,column,include_these=None,to_plot_compare=False):
-    """
-    Plot strip-plot of sample values in each group. Compare sample means with t-test and p-value. Also return bootstrapped confidence intervals (robust to outliers)
-    """
-    if include_these is None:
-        include_these=t.iloc[:,0].copy()
-        include_these[:]=True #array of all Trues to include all rows
-    x = t.loc[t.use_hrd & eval(subgroup1) & include_these, column]
-    y = t.loc[t.use_hrd & eval(subgroup2) & include_these, column]     
-    mean_diff = np.mean(x)-np.mean(y)
-    p_ttest = ttest_ind(x,y).pvalue
-    p_MW = mannwhitneyu(x,y).pvalue
-    if to_plot_compare:
-        fig, ax = plt.subplots()
-        sns.set_context('talk')
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=FutureWarning)
-            sns.stripplot(ax=ax,y='group03',x=column,data=t.loc[t.use_hrd & (eval(subgroup1)|eval(subgroup2)) & include_these,:],alpha=0.5,palette=colors)
-        ax.set_title(f'meandiff={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
-        fig.tight_layout()
-        sns.despine()
-    else:
-        print(f'{column}\t {subgroup1} vs {subgroup2}:\t meandiff={mean_diff:.2f}, ttest p={p_ttest:.2f}, MW p={p_MW:.2f}')
-
-def scatter(t,group1,group2,column_name1,column_name2,robust=True,include_these=None):
-    """
-    Scatter plot of column_name1 vs column_name2 from DataFrame t. Scatter points are colored by group1 and group2. Put correlation within each group on the title. Also plot a line of best fit for each group
-    """
-    if include_these is None:
-        include_these=t.iloc[:,0].copy()
-        include_these[:]=True #array of all Trues to include all rows
-    if robust: 
-        corr_func=spearmanr #could use skipped correlations in pingouin instead
-        reg_func = TheilSenRegressor
-    else: 
-        corr_func= pearsonr
-        reg_func = LinearRegression
-    fig, ax = plt.subplots()
-    if robust: title_string = 'Robust: '
-    else: title_string = 'Non-robust: '
-    for group in [group1,group2]:
-        x = t.loc[t.use_hrd & include_these & eval(group),column_name1]
-        y = t.loc[t.use_hrd & include_these & eval(group),column_name2]
-        r,p = corr_func(x,y)
-        xnew = np.linspace(min(x),max(x),100)
-        reg = reg_func().fit(x.values.reshape(-1,1),y.values)
-        ynew = reg.predict(xnew.reshape(-1,1))
-        ax.scatter(x,y,label=group,color=colors[group])
-        ax.plot(xnew,ynew,color=colors[group])
-        title_string += f'{group}: r={r:.2f} p={p:.2f}, '
-    ax.set_xlabel(column_name1)
-    ax.set_ylabel(column_name2)
-    ax.set_title(title_string[:-2])
-    ax.legend([group1,group2])
-    fig.tight_layout()
-
-
 def get_data_files(subject,data_folder):
     contents=glob(f"{data_folder}\\PCNS_{subject}_BL\\beh\\HRD*")
     assert(len(contents)==1)
